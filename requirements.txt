@@ -1,0 +1,10 @@
+bioconda
+compilers
+meson
+gperftools
+sdsl-lite
+libdivsufsort
+btllib
+libsequence 
+zlib
+
