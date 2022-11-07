@@ -9,45 +9,10 @@
 #include <btllib/seq_reader.hpp>
 #include <Sequence/Translate.hpp>
 
-// revese complement a DNA sequence
-std::string revcomp(const std::string& seq)
-{
-  std::string rc(seq);
-  std::reverse(rc.begin(), rc.end());
-  for (size_t i = 0; i < rc.size(); ++i) {
-    switch (rc[i]) {
-    case 'A':
-      rc[i] = 'T';
-      break;
-    case 'C':
-      rc[i] = 'G';
-      break;
-    case 'G':
-      rc[i] = 'C';
-      break;
-    case 'T':
-      rc[i] = 'A';
-      break;
-    case 'a':
-      rc[i] = 't';
-      break;
-    case 'c':
-      rc[i] = 'g';
-      break;
-    case 'g':
-      rc[i] = 'c';
-      break;
-    case 't':
-      rc[i] = 'a';
-      break;
-    }
-  }
-  return rc;
-}
 
 std::vector<std::string> sixframe_translate(const std::string& dna) {
     std::vector<std::string> protein;
-    std::string rev_dna = revcomp(dna);
+    std::string rev_dna = btllib::get_reverse_complement(dna);
     protein.push_back(Sequence::Translate(dna.begin(), dna.end()));
     protein.push_back(Sequence::Translate(rev_dna.begin(), rev_dna.end()));
     protein.push_back(Sequence::Translate(dna.begin() + 1, dna.end()));
