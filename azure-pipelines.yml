@@ -1,0 +1,22 @@
+jobs:
+- job:
+  displayName: ubuntu-latest
+  pool:
+    vmImage: 'ubuntu-latest'
+
+  steps:
+  - script: echo "##vso[task.prependpath]$CONDA/bin"
+    displayName: Add conda to PATH
+  - script: conda create --yes --quiet --name goldstandard_CI
+    displayName: Create Anaconda environment
+  - script: |
+      source activate goldstandard_CI
+      conda install --yes -c conda-forge mamba python=3.9
+      mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite btllib libdivsufsort libsequence zlib
+    displayName: Install dependencies
+  - script: |
+      source activate goldstandard_CI
+      meson build --prefix=$(pwd)/test_build
+      cd build
+      ninja install
+    displayName: Compile GoldStandard
