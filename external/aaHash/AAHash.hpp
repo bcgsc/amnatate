@@ -9,11 +9,17 @@
 #ifndef AA_HASH_H
 #define AA_HASH_H
 
-#include "vendor/ntHash/nthash.hpp"
 
 #include <string>
 #include <limits>
 #include <vector>
+
+
+// shift for gerenerating multiple hash values
+const int multiShift = 27;
+
+// seed for gerenerating multiple hash values
+static const uint64_t multiSeed = 0x90b45d39fb6da1fa;
 
 // 64-bit random seeds corresponding to 20 amino acids
 
@@ -655,12 +661,21 @@ static const uint64_t **LEVEL_X_AA_SEED_LEFT_31BITS_ROLL_TABLE[4] = {nullptr, AA
 
 //TODO post XOR table
 
-
+inline uint64_t rol1(const uint64_t v) {
+    return (v << 1) | (v >> 63);
+}
 
 inline uint64_t rolx(const uint64_t v, const unsigned x)
 {
     return (v << x) | (v >> (64 - x));
 }
+
+// swap bit 0 with bit 33 in "v"
+inline uint64_t swapbits033(const uint64_t v) {
+    uint64_t x = (v ^ (v >> 33)) & 1;
+    return v ^ (x | (x << 33));
+}
+
 
 
 // Hash value of the base kmer(kmer_0)
