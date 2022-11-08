@@ -171,6 +171,7 @@ int main(int argc, char** argv) {
         for (const auto record : reader) {            
             // insert record.id into seq_ID_to_miBf_ID with value miBf_ID
             seq_ID_to_miBf_ID[record.id] = miBf_ID;
+            ++miBf_ID;
         }
     }
     
