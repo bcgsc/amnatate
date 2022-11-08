@@ -12,7 +12,7 @@ jobs:
   - script: |
       source activate goldstandard_CI
       conda install --yes -c conda-forge mamba python=3.9
-      mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-litelibdivsufsort libsequence zlib cmake
+      mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake
     displayName: Install dependencies
   - script: |
       git clone --recurse-submodules https://github.com/bcgsc/btllib
