@@ -23,8 +23,8 @@ jobs:
     displayName: Install btllib
   - script: |
       source activate goldstandard_CI
-      export LDFLAGS="-L/projects/btl/jowong/github/goldstandard/btllib/install/lib $LDFLAGS"
-      export CPPFLAGS="-isystem/projects/btl/jowong/github/goldstandard/btllib/install/include $CPPFLAGS"
+      export LDFLAGS="-L'/home/vsts/work/1/s/btllib/install/lib $LDFLAGS"
+      export CPPFLAGS="-isystem'/home/vsts/work/1/s/btllib/install/include $CPPFLAGS"
       meson build --prefix=$(pwd)/test_build
       cd build
       ninja install
