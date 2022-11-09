@@ -144,12 +144,12 @@ int main(int argc, char** argv) {
 
     // print log of current parameters if verbose flag is set
     if (verbose_flag) {
-        std::cerr << "Input file: " << input_file
-                    << "Output prefix: " << output_prefix
-                    << "Reference path: " << reference_path
-                    << "Threads: " << threads
-                    << "Hash number: " << hash_num
-                    << "Kmer size: " << kmer_size
+        std::cerr << "Input file: " << input_file << "\n"
+                    << "Output prefix: " << output_prefix << "\n"
+                    << "Reference path: " << reference_path << "\n"
+                    << "Threads: " << threads << "\n"
+                    << "Hash number: " << hash_num << "\n"
+                    << "Kmer size: " << kmer_size << "\n"
                     << "Genome size: " << genome_size << std::endl;
     }
 
@@ -164,6 +164,10 @@ int main(int argc, char** argv) {
     }
     btllib::MIBloomFilter<uint32_t> mi_bf(calc_optimal_size(genome_size / 3 * 6, hash_num, 0.1), hash_num);
 
+    if (verbose_flag) {
+        std::cerr << "Creating seq_id to ID table" << std::endl;
+    }
+
     std::unordered_map<std::string, uint32_t> seq_ID_to_miBf_ID;
     {
         uint32_t miBf_ID = 1;
@@ -174,8 +178,15 @@ int main(int argc, char** argv) {
             ++miBf_ID;
         }
     }
+    if (verbose_flag) {
+        std::cerr << "Making miBF" << std::endl;
+    }
+
     
     for (int stage = 0; stage < 3; stage++) {
+        if (verbose_flag) {
+            std::cerr << "stage:" << stage << std::endl;
+        }
         btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
 #pragma omp parallel
         for (const auto record : reader) {
@@ -195,11 +206,14 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        if (stage == 0) { 
+            mi_bf.complete_bv_insertion();
+        }
 
     }
 
 
-    output_file << "name\thits\texpected_hits" << std::endl;
+    /*output_file << "name\thits\trc_hits\t+1_hits\trc_+1_hits\t+2_hits\trc_+2_hits\texpected_hits\tpct_hits" << std::endl;
 
     btllib::SeqReader reader(input_file, btllib::SeqReader::Flag::LONG_MODE);
     if (verbose_flag) {
@@ -208,27 +222,66 @@ int main(int argc, char** argv) {
 #pragma omp parallel
   for (const auto record : reader) {
     std::vector<std::string> protein = sixframe_translate(record.seq);
-    std::map<uint32_t, size_t> id_to_hits;
+    std::vector<std::map<uint32_t, size_t>> frame_to_id_to_hits(6);
     size_t expected_hits = protein[0].size() - kmer_size + 1;
     for (uint8_t i = 0; i < protein.size(); i++) {
-                AAHash itr(protein[i], hash_num, kmer_size);
-                while (itr != AAHash::end()) {
-                    auto temp_ID_hits =  mi_bf.get_id(*itr); // change this to avoid reallocating memory
-                    for (auto& ID_hits : temp_ID_hits) {
-                        if (id_to_hits.find(ID_hits) == id_to_hits.end()) {
-                            id_to_hits[ID_hits] = 1;
-                        } else {
-                            id_to_hits[ID_hits]++;
-                        }
-                    }
+        AAHash itr(protein[i], hash_num, kmer_size);
+        auto& id_to_hits = frame_to_id_to_hits[i];
+        while (itr != AAHash::end()) {
+            auto temp_ID_hits =  mi_bf.get_id(*itr); // change this to avoid reallocating memory
+            for (auto& ID_hits : temp_ID_hits) {
+                if (id_to_hits.find(ID_hits) == id_to_hits.end()) {
+                    id_to_hits[ID_hits] = 1;
+                } else {
+                    id_to_hits[ID_hits]++;
                 }
+            }
+            ++itr;
+        }
     
     }
-    auto max_hits = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-#pragma omp critical 
-    output_file << record.id << "\t" << max_hits->second << "\t" << expected_hits << std::endl;
-  }
+    std::vector<uint32_t> max_hits(6, 0);
+    for (uint8_t i = 0; i < 6; i++) {
+        auto& id_to_hits = frame_to_id_to_hits[i];
+        max_hits[i] = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->second;
+    }
 
+#pragma omp critical
+    {
+        output_file << record.id << "\t" << max_hits[0] << "\t" << max_hits[1] << "\t" << max_hits[2] << "\t" << max_hits[3] << "\t" << max_hits[4] << "\t" << max_hits[5] << "\t" << expected_hits << "\t" << (double)max_hits[0] / expected_hits << std::endl;
+    }
+  }
+*/
+
+    output_file << "name\thits\texpected_hits\tpct_hits" << std::endl;
+
+    btllib::SeqReader reader(input_file, btllib::SeqReader::Flag::LONG_MODE);
+    if (verbose_flag) {
+        std::cerr << "Reading input file: " << input_file << std::endl;
+    }
+#pragma omp parallel
+    for (const auto record : reader) {
+        std::map<uint32_t, size_t> id_to_hits;
+        size_t expected_hits = record.seq.size() - kmer_size + 1;
+        AAHash itr(record.seq, hash_num, kmer_size);
+        while (itr != AAHash::end()) {
+            auto temp_ID_hits =  mi_bf.get_id(*itr); // change this to avoid reallocating memory
+            for (auto& ID_hits : temp_ID_hits) {
+                if (id_to_hits.find(ID_hits) == id_to_hits.end()) {
+                    id_to_hits[ID_hits] = 1;
+                } else {
+                    id_to_hits[ID_hits]++;
+                }
+            }
+            ++itr;
+        }
+        auto& max_hits = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->second;
+#pragma omp critical
+        {
+            output_file << record.id << "\t" << max_hits << "\t" << expected_hits << "\t" << (double)max_hits / expected_hits << std::endl;
+        }
+    }
+    return 0;
 
 
 
