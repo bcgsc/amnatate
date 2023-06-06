@@ -17,12 +17,12 @@
 size_t calc_optimal_size(size_t entries, unsigned hash_num, double occupancy)
 {
     size_t non64ApproxVal =
-      size_t(-double(entries) * double(hash_num) / log(1.0 - occupancy));
+        size_t(-double(entries) * double(hash_num) / log(1.0 - occupancy));
     return non64ApproxVal + (64 - non64ApproxVal % 64);
 }
 
-
-std::vector<std::string> sixframe_translate(const std::string& dna) {
+std::vector<std::string> sixframe_translate(const std::string &dna)
+{
     std::vector<std::string> protein;
     std::string rev_dna = btllib::get_reverse_complement(dna);
     protein.push_back(Sequence::Translate(dna.begin(), dna.end()));
@@ -35,7 +35,8 @@ std::vector<std::string> sixframe_translate(const std::string& dna) {
 }
 
 // main function that takes in command line arguments using getopt
-int main(int argc, char** argv) {
+int main(int argc, char **argv)
+{
     // declare variables
     int opt;
     int option_index = 0;
@@ -58,55 +59,57 @@ int main(int argc, char** argv) {
         {"hash", required_argument, 0, 'h'},
         {"kmer", required_argument, 0, 'k'},
         {"genome", required_argument, 0, 'g'},
-        {0, 0, 0, 0}
-    };
-
+        {0, 0, 0, 0}};
 
     // loop through command line arguments
-    while ((opt = getopt_long(argc, argv, "g:h:i:t:o:r:k:", long_options, &option_index)) != -1) {
-        switch (opt) {
-            case 0:
-                if (long_options[option_index].flag != 0) {
-                    break;
-                }
-                std::cout << "option " << long_options[option_index].name;
-                if (optarg) {
-                    std::cout << " with arg " << optarg;
-                }
-                std::cout << std::endl;
+    while ((opt = getopt_long(argc, argv, "g:h:i:t:o:r:k:", long_options, &option_index)) != -1)
+    {
+        switch (opt)
+        {
+        case 0:
+            if (long_options[option_index].flag != 0)
+            {
                 break;
-            case 't':
-                threads = std::stoul(optarg);
-                break;
-            case 'i':
-                input_file = optarg;
-                break;
-            case 'r':
-                reference_path = optarg;
-                break;
-            case 'o':
-                output_prefix = optarg;
-                break;
-            case 'h':
-                hash_num = std::stoi(optarg);
-                break;
-            case 'k':
-                kmer_size = std::stoi(optarg);
-                break;
-            case 'g':
-                genome_size = std::stoul(optarg);
-                break;
-            case '?':
-                break;
-            default:
-                std::cout << "Unknown option: " << opt << std::endl;
-                break;
+            }
+            std::cout << "option " << long_options[option_index].name;
+            if (optarg)
+            {
+                std::cout << " with arg " << optarg;
+            }
+            std::cout << std::endl;
+            break;
+        case 't':
+            threads = std::stoul(optarg);
+            break;
+        case 'i':
+            input_file = optarg;
+            break;
+        case 'r':
+            reference_path = optarg;
+            break;
+        case 'o':
+            output_prefix = optarg;
+            break;
+        case 'h':
+            hash_num = std::stoi(optarg);
+            break;
+        case 'k':
+            kmer_size = std::stoi(optarg);
+            break;
+        case 'g':
+            genome_size = std::stoul(optarg);
+            break;
+        case '?':
+            break;
+        default:
+            std::cout << "Unknown option: " << opt << std::endl;
+            break;
         }
-
     }
 
     // print help message with required arguments
-    if (help_flag) {
+    if (help_flag)
+    {
         std::cerr << "Usage: " << argv[0] << " [options]" << std::endl;
         std::cerr << "Options:" << std::endl;
         std::cerr << "  -h, --help\t\t\tPrint this help message" << std::endl;
@@ -119,52 +122,56 @@ int main(int argc, char** argv) {
     }
 
     // print error message if input file is not provided
-    if (input_file.empty()) {
+    if (input_file.empty())
+    {
         std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print error message if reference path is not provided
-    if (reference_path.empty()) {
+    if (reference_path.empty())
+    {
         std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print error message if threads is not provided
-    if (threads == 0) {
+    if (threads == 0)
+    {
         std::cerr << "Threads is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print error message if genome size is not provided
-    if (genome_size == 0) {
+    if (genome_size == 0)
+    {
         std::cerr << "Genome size is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print log of current parameters if verbose flag is set
-    if (verbose_flag) {
+    if (verbose_flag)
+    {
         std::cerr << "Input file: " << input_file << "\n"
-                    << "Output prefix: " << output_prefix << "\n"
-                    << "Reference path: " << reference_path << "\n"
-                    << "Threads: " << threads << "\n"
-                    << "Hash number: " << hash_num << "\n"
-                    << "Kmer size: " << kmer_size << "\n"
-                    << "Genome size: " << genome_size << std::endl;
+                  << "Output prefix: " << output_prefix << "\n"
+                  << "Reference path: " << reference_path << "\n"
+                  << "Threads: " << threads << "\n"
+                  << "Hash number: " << hash_num << "\n"
+                  << "Kmer size: " << kmer_size << "\n"
+                  << "Genome size: " << genome_size << std::endl;
     }
-
-
-
 
     omp_set_num_threads(threads);
     std::ofstream output_file(output_prefix + ".results.tsv");
 
-    if (verbose_flag) {
+    if (verbose_flag)
+    {
         std::cerr << "Reading reference file: " << reference_path << std::endl;
     }
     btllib::MIBloomFilter<uint32_t> mi_bf(calc_optimal_size(genome_size / 3 * 6, hash_num, 0.1), hash_num);
 
-    if (verbose_flag) {
+    if (verbose_flag)
+    {
         std::cerr << "Creating seq_id to ID table" << std::endl;
     }
 
@@ -172,46 +179,56 @@ int main(int argc, char** argv) {
     {
         uint32_t miBf_ID = 1;
         btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
-        for (const auto record : reader) {            
+        for (const auto record : reader)
+        {
             // insert record.id into seq_ID_to_miBf_ID with value miBf_ID
             seq_ID_to_miBf_ID[record.id] = miBf_ID;
             ++miBf_ID;
         }
     }
-    if (verbose_flag) {
+    if (verbose_flag)
+    {
         std::cerr << "Making miBF" << std::endl;
     }
 
-    
-    for (int stage = 0; stage < 3; stage++) {
-        if (verbose_flag) {
+    for (int stage = 0; stage < 3; stage++)
+    {
+        if (verbose_flag)
+        {
             std::cerr << "stage:" << stage << std::endl;
         }
         btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
 #pragma omp parallel
-        for (const auto record : reader) {
+        for (const auto record : reader)
+        {
             std::vector<std::string> protein = sixframe_translate(record.seq);
-            auto& miBf_ID = seq_ID_to_miBf_ID[record.id];
-            for (uint8_t i = 0; i < protein.size(); i++) {
+            auto &miBf_ID = seq_ID_to_miBf_ID[record.id];
+            for (uint8_t i = 0; i < protein.size(); i++)
+            {
                 AAHash itr(protein[i], hash_num, kmer_size);
-                while (itr != AAHash::end()) {
-                    if (stage == 0) {
+                while (itr != AAHash::end())
+                {
+                    if (stage == 0)
+                    {
                         mi_bf.insert_bv(*itr);
-                    } else if (stage == 1) {
+                    }
+                    else if (stage == 1)
+                    {
                         mi_bf.insert_id(*itr, miBf_ID);
-                    } else {
+                    }
+                    else
+                    {
                         mi_bf.insert_saturation(*itr, miBf_ID);
                     }
                     ++itr;
                 }
             }
         }
-        if (stage == 0) { 
+        if (stage == 0)
+        {
             mi_bf.complete_bv_insertion();
         }
-
     }
-
 
     /*output_file << "name\thits\trc_hits\t+1_hits\trc_+1_hits\t+2_hits\trc_+2_hits\texpected_hits\tpct_hits" << std::endl;
 
@@ -238,7 +255,7 @@ int main(int argc, char** argv) {
             }
             ++itr;
         }
-    
+
     }
     std::vector<uint32_t> max_hits(6, 0);
     for (uint8_t i = 0; i < 6; i++) {
@@ -256,35 +273,39 @@ int main(int argc, char** argv) {
     output_file << "name\thits\texpected_hits\tpct_hits" << std::endl;
 
     btllib::SeqReader reader(input_file, btllib::SeqReader::Flag::LONG_MODE);
-    if (verbose_flag) {
+    if (verbose_flag)
+    {
         std::cerr << "Reading input file: " << input_file << std::endl;
     }
 #pragma omp parallel
-    for (const auto record : reader) {
+    for (const auto record : reader)
+    {
         std::map<uint32_t, size_t> id_to_hits;
         size_t expected_hits = record.seq.size() - kmer_size + 1;
         AAHash itr(record.seq, hash_num, kmer_size);
-        while (itr != AAHash::end()) {
-            auto temp_ID_hits =  mi_bf.get_id(*itr); // change this to avoid reallocating memory
-            for (auto& ID_hits : temp_ID_hits) {
-                if (id_to_hits.find(ID_hits) == id_to_hits.end()) {
+        while (itr != AAHash::end())
+        {
+            auto temp_ID_hits = mi_bf.get_id(*itr); // change this to avoid reallocating memory
+            for (auto &ID_hits : temp_ID_hits)
+            {
+                if (id_to_hits.find(ID_hits) == id_to_hits.end())
+                {
                     id_to_hits[ID_hits] = 1;
-                } else {
+                }
+                else
+                {
                     id_to_hits[ID_hits]++;
                 }
             }
             ++itr;
         }
-        auto& max_hits = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->second;
+        auto &max_hits = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto &a, const auto &b)
+                                          { return a.second < b.second; })
+                             ->second;
 #pragma omp critical
         {
             output_file << record.id << "\t" << max_hits << "\t" << expected_hits << "\t" << (double)max_hits / expected_hits << std::endl;
         }
     }
     return 0;
-
-
-
-
 }
-
