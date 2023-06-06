@@ -12,19 +12,10 @@ jobs:
       - script: |
           source activate goldstandard_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib
         displayName: Install dependencies
       - script: |
-          git clone --recurse-submodules https://github.com/bcgsc/btllib
-          cd btllib
-          git checkout mi_bf_constructor2
           source activate goldstandard_CI
-          ./compile
-        displayName: Install btllib
-      - script: |
-          source activate goldstandard_CI
-          export LDFLAGS="-L/home/vsts/work/1/s/btllib/install/lib $LDFLAGS"
-          export CPPFLAGS="-isystem/home/vsts/work/1/s/btllib/install/include $CPPFLAGS"
           meson build --prefix=$(pwd)/test_build
           cd build
           ninja install
