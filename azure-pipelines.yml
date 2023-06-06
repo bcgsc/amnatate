@@ -22,4 +22,4 @@ jobs:
         displayName: Compile GoldStandard
       - script: |
           ./build/goldstandard -r tests/E_coli_K12_MG1655.fa -i tests/NC_000913.faa  -h 3 -k 12 -t48 -g 30000000 --verbose
-          diff -q  _.results.tsv tests/test.results.tsv
+          diff -q  <( sort_.results.tsv) <( sort tests/test.results.tsv)
