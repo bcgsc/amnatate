@@ -7,12 +7,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include <btllib/aahash.hpp>
 #include <btllib/seq.hpp>
 #include <btllib/seq_reader.hpp>
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
-
-#include "AAHash.hpp"
 
 size_t calc_optimal_size(size_t entries, unsigned hash_num, double occupancy)
 {
@@ -205,22 +204,21 @@ int main(int argc, char **argv)
             auto &miBf_ID = seq_ID_to_miBf_ID[record.id];
             for (uint8_t i = 0; i < protein.size(); i++)
             {
-                AAHash itr(protein[i], hash_num, kmer_size);
-                while (itr != AAHash::end())
+                btllib::AAHash itr(protein[i], hash_num, kmer_size, 1);
+                while (itr.roll())
                 {
                     if (stage == 0)
                     {
-                        mi_bf.insert_bv(*itr);
+                        mi_bf.insert_bv(itr.hashes());
                     }
                     else if (stage == 1)
                     {
-                        mi_bf.insert_id(*itr, miBf_ID);
+                        mi_bf.insert_id(itr.hashes(), miBf_ID);
                     }
                     else
                     {
-                        mi_bf.insert_saturation(*itr, miBf_ID);
+                        mi_bf.insert_saturation(itr.hashes(), miBf_ID);
                     }
-                    ++itr;
                 }
             }
         }
@@ -282,10 +280,10 @@ int main(int argc, char **argv)
     {
         std::map<uint32_t, size_t> id_to_hits;
         size_t expected_hits = record.seq.size() - kmer_size + 1;
-        AAHash itr(record.seq, hash_num, kmer_size);
-        while (itr != AAHash::end())
+        btllib::AAHash itr(record.seq, hash_num, kmer_size, 1);
+        while (itr.roll())
         {
-            auto temp_ID_hits = mi_bf.get_id(*itr); // change this to avoid reallocating memory
+            auto temp_ID_hits = mi_bf.get_id(itr.hashes()); // change this to avoid reallocating memory
             for (auto &ID_hits : temp_ID_hits)
             {
                 if (id_to_hits.find(ID_hits) == id_to_hits.end())
@@ -297,7 +295,6 @@ int main(int argc, char **argv)
                     id_to_hits[ID_hits]++;
                 }
             }
-            ++itr;
         }
         auto &max_hits = std::max_element(id_to_hits.begin(), id_to_hits.end(), [](const auto &a, const auto &b)
                                           { return a.second < b.second; })
