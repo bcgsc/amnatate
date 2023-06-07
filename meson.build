@@ -3,6 +3,7 @@ project('goldstandard', 'cpp',
         license : 'GPL-3',
         default_options : [ 'cpp_std=c++17', 'warning_level=3', 'werror=true'])
 
+aahash_dep = declare_dependency(include_directories : 'external/aaHash')
 
 threads_dep = dependency('threads')
 openmp_dep = dependency('openmp')
@@ -19,7 +20,7 @@ btllib_dep =  compiler.find_library('btllib')
 rootpath = meson.source_root()
 
 src_files = [ 'goldstandard.cpp' ]
-deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep ]
+deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep, aahash_dep ]
 link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz' ]
 
 executable('goldstandard',
