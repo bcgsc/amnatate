@@ -1,4 +1,4 @@
-# GoldStandard
+# amnatate
 
 ## Description
 Asses draft genome completeness using a hash based approach.
@@ -13,8 +13,8 @@ Design and implementation: Johnathan Wong
 
 #### Github repository main branch
  ```
-  git clone https://github.com/bcgsc/goldstandard.git
-  cd goldstandard
+  git clone https://github.com/bcgsc/amnatate.git
+  cd amnatate
   meson --prefix /path/to/install build
   cd build
   ninja install
@@ -35,7 +35,7 @@ Design and implementation: Johnathan Wong
 
 We recommend creating a fresh environment
 ```
-conda create --name goldstandard
+conda create --name amnatate
 ```
 
 Installing the dependencies
@@ -44,9 +44,9 @@ conda install -c conda-forge -c bioconda --file requirements.txt
 ```
 
 ## License
-GoldStandard Copyright (c) 2022 British Columbia Cancer Agency Branch. All rights reserved.
+amnatate Copyright (c) 2022 British Columbia Cancer Agency Branch. All rights reserved.
 
-GoldStandard is released under the GNU General Public License v3
+amnatate is released under the GNU General Public License v3
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3.
 

@@ -1,7 +1,7 @@
-project('goldstandard', 'cpp',
+project('amnatate', 'cpp',
         version : '0.0.1',
         license : 'GPL-3',
-        default_options : [ 'cpp_std=c++17', 'warning_level=3', 'werror=true'])
+        default_options : [ 'cpp_std=c++20', 'warning_level=3', 'werror=true'])
 
 
 threads_dep = dependency('threads')
@@ -18,11 +18,11 @@ btllib_dep =  compiler.find_library('btllib')
 
 rootpath = meson.source_root()
 
-src_files = [ 'goldstandard.cpp' ]
+src_files = [ 'amnatate.cpp' ]
 deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep ]
 link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz' ]
 
-executable('goldstandard',
+executable('amnatate',
     src_files,
     dependencies : deps,
     link_args : link_args,
