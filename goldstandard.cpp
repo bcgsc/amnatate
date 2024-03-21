@@ -37,6 +37,146 @@ std::vector<std::string> sixframe_translate(const std::string &dna)
     return protein;
 }
 
+btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t hash_num, const size_t kmer_size) 
+{
+    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(seq.size() * 3, 1, 0.1), 1);
+    for (int stage = 0; stage < 3; stage++)
+    {
+
+        btllib::AAHash itr(seq, hash_num, kmer_size, 1);
+        btllib::AAHash itr2(seq, hash_num, kmer_size, 2);
+        btllib::AAHash itr3(seq, hash_num, kmer_size, 3);
+        size_t miBf_ID = 1;
+        
+
+        while (itr.roll() && itr2.roll() && itr3.roll())
+        {
+            if (stage == 0)
+            {
+                mi_bf.insert_bv(itr.hashes());
+                mi_bf.insert_bv(itr2.hashes());
+                mi_bf.insert_bv(itr3.hashes());
+            }
+            else if (stage == 1)
+            {
+                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
+                mi_bf.insert_id(itr.hashes(), new_ID);
+                mi_bf.insert_id(itr2.hashes(), new_ID);
+                mi_bf.insert_id(itr3.hashes(), new_ID);
+            }
+            else
+            {
+                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
+                mi_bf.insert_saturation(itr.hashes(), new_ID);
+                mi_bf.insert_saturation(itr2.hashes(), new_ID);
+                mi_bf.insert_saturation(itr3.hashes(), new_ID);
+            }
+        }
+        
+        if (stage == 0)
+        {
+            mi_bf.complete_bv_insertion();
+        }
+    }     
+    return mi_bf;
+
+}
+
+void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, const std::string& seq, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori)
+{
+
+    //sort start_end_pos_vec by start_pos
+    std::sort(start_end_pos_vec.begin(), start_end_pos_vec.end(), [](const std::tuple<size_t, size_t> &a, const std::tuple<size_t, size_t> &b)
+    {
+        return std::get<0>(a) < std::get<0>(b);
+    });
+
+    // make a new vector and find all the gaps between the start and end pos that are larger than kmer_size
+    std::vector<std::tuple<size_t, size_t>> gap_vec;
+    for (size_t i = 0; i < start_end_pos_vec.size() - 1; ++i)
+    {
+        if (std::get<0>(start_end_pos_vec[i + 1]) - std::get<1>(start_end_pos_vec[i]) >= rescue_kmer_size)
+        {
+            gap_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_vec[i]), std::get<0>(start_end_pos_vec[i + 1])));
+        }
+    }
+
+    // make a new vector and find all the gaps between the start and end pos in tar that are larger than kmer_size
+    std::vector<std::tuple<size_t, size_t>> gap_in_tar_space_vec;
+    for (size_t i = 0; i < start_end_pos_in_tar_space_vec.size() - 1; ++i)
+    {
+        if (std::get<0>(start_end_pos_in_tar_space_vec[i + 1]) - std::get<1>(start_end_pos_in_tar_space_vec[i]) >= rescue_kmer_size)
+        {
+            gap_in_tar_space_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_in_tar_space_vec[i]), std::get<0>(start_end_pos_in_tar_space_vec[i + 1])));
+        }
+    }
+
+
+    // make an unordered_set of all the pos in the gaps in start_end_pos_in_tar_space_vec
+    std::unordered_set<size_t> gap_index_set;
+    for (auto &gap : gap_in_tar_space_vec)
+    {
+        for (size_t i = std::get<0>(gap); i < std::get<1>(gap); ++i)
+        {
+            gap_index_set.insert(i);
+        }
+    }
+    
+
+    // make small mibf
+    auto small_mi_bf = make_mibf(seq, hash_num, rescue_kmer_size);
+
+    // iterate through gap_index_set and check if the pos is in the mibf
+    // if it is, add the pos to the start_end_pos_vec
+    size_t start_of_first_gap = std::get<0>(gap_vec[0]);
+    size_t end_of_last_gap = std::get<1>(gap_vec[gap_vec.size() - 1]);
+
+    for (size_t frame = 0; frame < 3; ++frame)
+    {
+        btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, 1, start_of_first_gap - 1);
+        aahash.roll();
+        bool prev_contains = false;
+        while(aahash.get_pos() <= end_of_last_gap + 1)
+        {     
+            if (small_mi_bf.bv_contains(aahash.hashes()))
+            {
+                // get pos of mibf entry
+                auto temp_ID_pos = small_mi_bf.get_id(aahash.hashes());
+                for (auto &ID_pos : temp_ID_pos)
+                {
+                    auto pos = ID_pos & 0xFFFFFFFF;
+                    if (gap_index_set.find(pos) != gap_index_set.end())
+                    {
+                        // remove entry
+                        gap_index_set.erase(pos);
+                        adjusted_kmer_counts++;
+                        break;
+                    }
+                }
+                prev_contains = true;
+            } else {
+                if (prev_contains) {
+                    // add to start_end_pos_vec
+                    adjusted_kmer_counts = adjusted_kmer_counts + rescue_kmer_size + 1;
+                }
+                prev_contains = false;
+            
+            }
+        }
+    }
+
+
+
+    for (auto &pos : gap_index_set)
+    {
+        btllib::AAHash aahash(sixframed_xlated_proteins[0 + ori * 3], hash_num, rescue_kmer_size, 1, pos);
+        if (small_mi_bf.bv_contains(aahash.hashes()))
+        {
+            start_end_pos_vec.emplace_back(std::make_tuple(pos, pos + rescue_kmer_size));
+        }
+    }
+}
+
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
 {
     // check size of miBf_IDs_snapshot and miBf_pos_snapshot
@@ -235,6 +375,7 @@ int main(int argc, char **argv)
     std::string output_prefix = "_";
     uint8_t hash_num = 1;
     uint8_t kmer_size = 10;
+    size_t rescue_kmer_size = 4;
     uint64_t genome_size = 0;
     static struct option long_options[] = {
         {"help", no_argument, &help_flag, 1},
@@ -366,6 +507,7 @@ int main(int argc, char **argv)
 
     std::unordered_map<std::string, uint32_t> seq_ID_to_miBf_ID;
     std::unordered_map<uint32_t, std::pair<std::string, size_t>> miBf_ID_to_seq_ID_and_len;
+    std::unordered_map<uint32_t, std::string> miBf_ID_to_seq;
     {
         uint32_t miBf_ID = 1;
         btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
@@ -375,6 +517,7 @@ int main(int argc, char **argv)
             seq_ID_to_miBf_ID[record.id] = miBf_ID;
             // insert miBf_ID into miBf_ID_to_seq_ID_and_len with value record.id and record.seq.size()
             miBf_ID_to_seq_ID_and_len[miBf_ID] = std::make_pair(record.id, record.seq.size());
+            miBf_ID_to_seq[miBf_ID] = record.seq;
             /*//std::cerr << "seq name: " << record.id << " miBf_ID: " << miBf_ID << std::endl;
             //std::cerr << "seq size: " << record.seq.size() << std::endl;
             //std::cerr << "seq: " << record.seq << std::endl; */
@@ -603,7 +746,7 @@ int main(int argc, char **argv)
                             break;
                         }
                         //std::cerr << "checkpoint 3" << std::endl;
-                        size_t seq_pos = aahash.get_pos() - 4;
+                        size_t seq_pos = aahash.get_pos() - kmer_size + 1;
                         // find the largest count in id_to_count
                         size_t temp_max_count = 0;
                         for (auto &ID_count : id_to_count)
@@ -815,6 +958,11 @@ int main(int argc, char **argv)
                     size_t prev_block_len = 0;
                     size_t block_start = 0;
                     size_t prev_block_start = 0;
+                    std::vector<std::tuple<size_t, size_t>> start_end_pos_vec;
+                    std::vector<std::tuple<size_t, size_t>> start_end_pos_tar_vec;
+
+                    
+                    
                     for (auto &frame_block_id_and_seq_pos : id_to_frame_block_id_and_seq_pos[miBf_ID])
                     {
                         if (verbose_flag) {
@@ -832,10 +980,16 @@ int main(int argc, char **argv)
                         }
 
                         size_t block_id = std::get<1>(frame_block_id_and_seq_pos);
-                        
+
+
 
                         if (frame_to_block_id_to_id_and_pos[frame].find(block_id) != frame_to_block_id_to_id_and_pos[frame].end())
                         {
+                            if (start_end_pos_vec.empty()) {
+                                start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
+                                start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
+                            }
+                        
                             prev_block_start = block_start;
                             block_start = std::get<2>(frame_block_id_and_seq_pos);
                             prev_block_len = block_len;
@@ -856,7 +1010,8 @@ int main(int argc, char **argv)
                             {
                                 if (end_pos < frame_to_block_id_to_id_and_pos[frame][block_id].first)
                                 {
-                                    
+                                    start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
+                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
                                     if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
                                         adjusted_kmer_counts += block_len + kmer_size - 1;
                                     } else {
@@ -865,10 +1020,10 @@ int main(int argc, char **argv)
                                     
 
                                     end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
-                                if (verbose_flag){
-                                    std::cerr << "update end_pos: " << end_pos << std::endl;
-                                    std::cerr << std::endl;
-                                }
+                                    if (verbose_flag){
+                                        std::cerr << "update end_pos: " << end_pos << std::endl;
+                                        std::cerr << std::endl;
+                                    }
                                 }
                                 else
                                 {
@@ -880,25 +1035,32 @@ int main(int argc, char **argv)
                                     }
                                     else if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
                                     {
+                                        fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori);
                                         incomplete_copies++;
                                     }
                                     double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
+                                    if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
                                     {
-                                                                if (strand == "-") {
-                                auto temp = seq_start_in_nucleotide;
-                                seq_start_in_nucleotide = record.seq.size() - seq_end_in_nucleotide;
-                                seq_end_in_nucleotide = record.seq.size() - temp;
-                            }
-    #pragma omp critical
-                                        {
-                                            gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name));
+                                        if (strand == "-") {
+                                            auto temp = seq_start_in_nucleotide;
+                                            seq_start_in_nucleotide = record.seq.size() - seq_end_in_nucleotide;
+                                            seq_end_in_nucleotide = record.seq.size() - temp;
                                         }
+#pragma omp critical
+{
+                                            gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name));
+}
                                     }
                                     
                                     end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
                                     adjusted_kmer_counts = block_len;
-                                    frame = 3;
+                                    seq_start_in_nucleotide = std::get<2>(frame_block_id_and_seq_pos) * 3 + frame;
+                                    // clear start_end_pos_vec and start_end_pos_tar_vec
+                                    start_end_pos_vec.clear();
+                                    start_end_pos_tar_vec.clear();
+                                    start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
+                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
+                                    //frame = 3; //bug fix problem with seq_start in nucleotide, 1 block off
                                     if (verbose_flag){
                                         std::cerr << "new end_pos: " << end_pos << std::endl;
                                     }
@@ -916,10 +1078,10 @@ int main(int argc, char **argv)
                         incomplete_copies++;
                     }
                     // log completeness
-    #pragma omp atomic
+#pragma omp atomic
                     seq_name_to_completeness[seq_name].complete_copies += complete_copies;
 
-    #pragma omp atomic
+#pragma omp atomic
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
 
                     if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
@@ -935,7 +1097,7 @@ int main(int argc, char **argv)
                                 seq_end_in_nucleotide = record.seq.size() - temp;
                             }
 
-    #pragma omp critical
+#pragma omp critical
                         {
 
                             gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name));
