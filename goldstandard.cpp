@@ -37,6 +37,7 @@ std::vector<std::string> sixframe_translate(const std::string &dna)
     return protein;
 }
 
+
 btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t hash_num, const size_t kmer_size) 
 {
     btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(seq.size() * 3, 1, 0.1), 1);
@@ -177,12 +178,14 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     }
 }
 
+
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
 {
     // check size of miBf_IDs_snapshot and miBf_pos_snapshot
     //  if size is more than 10, pop front
     std::unordered_set<uint32_t> id_set;
     if (miBf_IDs_snapshot.size() >= 5)
+
     {
         // insert id into id_set before removing
         for (size_t i = 0; i < miBf_IDs_snapshot.front().size(); ++i)
@@ -193,10 +196,12 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
         for (auto &ID : id_set)
         {
             id_to_count[ID]--;
+
             if (id_to_count[ID] == 0)
             {
                 id_to_count.erase(ID);
             }
+
         }
         id_set.clear();
         miBf_IDs_snapshot.pop_front();
@@ -241,7 +246,9 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     }
     id_set.clear();
 
+
     if (miBf_IDs_snapshot.size() < 5)
+
     {
         return false;
     }
@@ -257,7 +264,9 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
             temp_max_count = ID_count.second;
         }
     }
+
     if (temp_mibf_ID == 0 || temp_max_count < 5)
+
     {
         return false;
     }
@@ -310,7 +319,9 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
                 }
                 prev_pos = pos;
 
+
                 if (counter >= 4)
+
                 {
                     return true;
                 }
@@ -351,10 +362,12 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
         {
             return false;
         }*/
+
         /*////std::cerr << "check pos before return true" << std::endl;
         for (auto &pos : temp_pos_set)
         {
             //std::cerr << "pos: " << pos << std::endl;
+
         }*/
     }
 
@@ -466,7 +479,9 @@ int main(int argc, char **argv)
     // print error message if threads is not provided
     if (threads == 0)
     {
+
         //std::cerr << "Threads is required. Use -h or --help for more information." << std::endl;
+
         exit(1);
     }
 
@@ -497,8 +512,10 @@ int main(int argc, char **argv)
         genome_size += record.seq.size();
     }
 
+
     btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(std::max<size_t>(genome_size * 3, 1000000), hash_num, 0.1), hash_num);
     // btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(1000000000, hash_num, 0.1), hash_num);
+
 
     if (verbose_flag)
     {
@@ -507,7 +524,9 @@ int main(int argc, char **argv)
 
     std::unordered_map<std::string, uint32_t> seq_ID_to_miBf_ID;
     std::unordered_map<uint32_t, std::pair<std::string, size_t>> miBf_ID_to_seq_ID_and_len;
+
     std::unordered_map<uint32_t, std::string> miBf_ID_to_seq;
+
     {
         uint32_t miBf_ID = 1;
         btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
@@ -517,10 +536,12 @@ int main(int argc, char **argv)
             seq_ID_to_miBf_ID[record.id] = miBf_ID;
             // insert miBf_ID into miBf_ID_to_seq_ID_and_len with value record.id and record.seq.size()
             miBf_ID_to_seq_ID_and_len[miBf_ID] = std::make_pair(record.id, record.seq.size());
+
             miBf_ID_to_seq[miBf_ID] = record.seq;
             /*//std::cerr << "seq name: " << record.id << " miBf_ID: " << miBf_ID << std::endl;
             //std::cerr << "seq size: " << record.seq.size() << std::endl;
             //std::cerr << "seq: " << record.seq << std::endl; */
+
             ++miBf_ID;
         }
     }
@@ -541,6 +562,7 @@ int main(int argc, char **argv)
         {
 
             btllib::AAHash itr(record.seq, hash_num, kmer_size, 1);
+
             btllib::AAHash itr2(record.seq, hash_num, kmer_size, 2);
             btllib::AAHash itr3(record.seq, hash_num, kmer_size, 3);
             auto &miBf_ID = seq_ID_to_miBf_ID[record.id];
@@ -554,6 +576,7 @@ int main(int argc, char **argv)
                     mi_bf.insert_bv(itr.hashes());
                     mi_bf.insert_bv(itr2.hashes());
                     mi_bf.insert_bv(itr3.hashes());
+
                 }
                 else if (stage == 1)
                 {
@@ -561,6 +584,7 @@ int main(int argc, char **argv)
                     mi_bf.insert_id(itr.hashes(), new_ID);
                     mi_bf.insert_id(itr2.hashes(), new_ID);
                     mi_bf.insert_id(itr3.hashes(), new_ID);
+
                 }
                 else
                 {
@@ -568,6 +592,7 @@ int main(int argc, char **argv)
                     mi_bf.insert_saturation(itr.hashes(), new_ID);
                     mi_bf.insert_saturation(itr2.hashes(), new_ID);
                     mi_bf.insert_saturation(itr3.hashes(), new_ID);
+
                 }
             }
         }
@@ -592,6 +617,27 @@ int main(int argc, char **argv)
         gff_files[i] << "##gff-version 3" << std::endl;
     }
 
+/*pragma omp parallel
+  for (const auto record : reader) {
+    std::vector<std::string> protein = sixframe_translate(record.seq);
+    std::vector<std::map<uint32_t, size_t>> frame_to_id_to_hits(6);
+    size_t expected_hits = protein[0].size() - kmer_size + 1;
+    for (uint8_t i = 0; i < protein.size(); i++) {
+        AAHash itr(protein[i], hash_num, kmer_size);
+        auto& id_to_hits = frame_to_id_to_hits[i];
+        while (itr != AAHash::end()) {
+            auto temp_ID_hits =  mi_bf.get_id(*itr); // change this to avoid reallocating memory
+            for (auto& ID_hits : temp_ID_hits) {
+                if (id_to_hits.find(ID_hits) == id_to_hits.end()) {
+                    id_to_hits[ID_hits] = 1;
+                } else {
+                    id_to_hits[ID_hits]++;
+                }
+            }
+            ++itr;
+        }
+*/
+
 
     // make a gff set sorted by seq name and start pos
     // the columns are seq name, start pos, end pos, score, strand,
@@ -615,8 +661,6 @@ int main(int argc, char **argv)
         gff_set_vector.emplace_back(gff_comparator);
     }
 
-    //auto& gff_set = gff_set_vector[0];
-
     btllib::SeqReader reader(input_file, btllib::SeqReader::Flag::LONG_MODE);
     if (verbose_flag)
     {
@@ -628,6 +672,7 @@ int main(int argc, char **argv)
         size_t complete_copies = 0;
         size_t incomplete_copies = 0;
         size_t expected_kmer_counts = 0;
+
         size_t highest_adjusted_kmer_counts = 0;
     };
     std::vector<std::unordered_map<std::string, completeness_struct>> seq_name_to_completeness_vec(3);
@@ -902,6 +947,7 @@ int main(int argc, char **argv)
                         miBf_IDs_snapshot.clear();
                         miBf_pos_snapshot.clear();
                         id_to_count.clear();
+
                     }
                 }
                 // iterate through id_to_count_across_all_frames and log the completeness
@@ -934,7 +980,9 @@ int main(int argc, char **argv)
                 std::string strand = "+";
                 if (ori == 1)
                 {
+
                     strand = "-";
+
                 }
 
                 for (auto &ID_count : id_to_count_across_all_frames)
@@ -1107,6 +1155,7 @@ int main(int argc, char **argv)
                 // //std::cerr << "done with ori" << std::endl;
             }
         }
+
     }
 
     // //std::cerr << "done processing" << std::endl;
@@ -1153,6 +1202,7 @@ int main(int argc, char **argv)
                         << "\t"
                         << "ID=" << std::get<5>(gff) << std::endl;
     }*/
+
 
 
     return 0;
