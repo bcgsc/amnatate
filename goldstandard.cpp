@@ -39,7 +39,11 @@ std::vector<std::string> sixframe_translate(const std::string &dna)
 
 btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t hash_num, const size_t kmer_size) 
 {
-    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(seq.size() * 3, 1, 0.1), 1);
+    size_t filter_size = seq.size() * 3;
+    if (filter_size < 100000) {
+        filter_size = 100000;
+    }
+    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(filter_size, 1, 0.1), 1);
     for (int stage = 0; stage < 3; stage++)
     {
 
@@ -77,12 +81,12 @@ btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t h
         {
             mi_bf.complete_bv_insertion();
         }
-    }     
+    }
     return mi_bf;
 
 }
 
-void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, const std::string& seq, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori)
+void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, const std::string& seq, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori, size_t kmer_size, size_t level)
 {
 
     //sort start_end_pos_vec by start_pos
@@ -93,21 +97,39 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
 
     // make a new vector and find all the gaps between the start and end pos that are larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_vec;
+    //output size of start_end_pos_vec
+    //std::cerr << "size of start_end_pos_vec: " << start_end_pos_vec.size() << std::endl;
+    /*for (const auto& tuple : start_end_pos_vec) {
+        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
+    }
+    std::cout << std::endl;*/
     for (size_t i = 0; i < start_end_pos_vec.size() - 1; ++i)
     {
-        if (std::get<0>(start_end_pos_vec[i + 1]) - std::get<1>(start_end_pos_vec[i]) >= rescue_kmer_size)
+        if (std::get<0>(start_end_pos_vec[i + 1]) - std::get<1>(start_end_pos_vec[i]) > kmer_size)
         {
             gap_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_vec[i]), std::get<0>(start_end_pos_vec[i + 1])));
         }
     }
+    if (gap_vec.size() == 0) {
+        return;
+    }
+    /*for (const auto& tuple : gap_vec) {
+        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
+    }
+    std::cout << std::endl;*/
 
     // make a new vector and find all the gaps between the start and end pos in tar that are larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_in_tar_space_vec;
+    //output size of start_end_pos_in_tar_space_vec
+    //std::cerr << "size of start_end_pos_in_tar_space_vec: " << start_end_pos_in_tar_space_vec.size() << std::endl;
+    /*for (const auto& tuple : start_end_pos_in_tar_space_vec) {
+        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
+    }*/
     for (size_t i = 0; i < start_end_pos_in_tar_space_vec.size() - 1; ++i)
     {
-        if (std::get<0>(start_end_pos_in_tar_space_vec[i + 1]) - std::get<1>(start_end_pos_in_tar_space_vec[i]) >= rescue_kmer_size)
+        if (std::get<0>(start_end_pos_in_tar_space_vec[i + 1]) - (std::get<1>(start_end_pos_in_tar_space_vec[i]) +5 ) > kmer_size) //TODO
         {
-            gap_in_tar_space_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_in_tar_space_vec[i]), std::get<0>(start_end_pos_in_tar_space_vec[i + 1])));
+            gap_in_tar_space_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_in_tar_space_vec[i]) + 5, std::get<0>(start_end_pos_in_tar_space_vec[i + 1])));
         }
     }
 
@@ -116,65 +138,113 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     std::unordered_set<size_t> gap_index_set;
     for (auto &gap : gap_in_tar_space_vec)
     {
+        //std::cerr << "gaps: " << std::endl;
         for (size_t i = std::get<0>(gap); i < std::get<1>(gap); ++i)
         {
             gap_index_set.insert(i);
+            //std::cerr << i << std::endl;
         }
     }
-    
+
+    //std::cerr << "done gap index" << std::endl;
+
 
     // make small mibf
+    //std::cerr << "seq to be inserted into small mibf: " << std::endl;
+    //std::cerr << seq << std::endl;
+    if (gap_index_set.size() == 0)
+    {
+        return;
+    }
     auto small_mi_bf = make_mibf(seq, hash_num, rescue_kmer_size);
+
+    //std::cerr << "done mibf" << std::endl;
 
     // iterate through gap_index_set and check if the pos is in the mibf
     // if it is, add the pos to the start_end_pos_vec
     size_t start_of_first_gap = std::get<0>(gap_vec[0]);
     size_t end_of_last_gap = std::get<1>(gap_vec[gap_vec.size() - 1]);
+    std::vector<std::vector<uint32_t>> vec_of_vec_of_pos(3);
+    std::vector<std::vector<size_t>> vec_of_vec_of_seq_pos(3);
+    //std::cerr << "pre frame" << std::endl;
 
     for (size_t frame = 0; frame < 3; ++frame)
     {
-        btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, 1, start_of_first_gap - 1);
+        btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, level, start_of_first_gap - 1);
         aahash.roll();
-        bool prev_contains = false;
+        //bool prev_contains = false;
         while(aahash.get_pos() <= end_of_last_gap + 1)
-        {     
+        {
+
             if (small_mi_bf.bv_contains(aahash.hashes()))
             {
                 // get pos of mibf entry
+
                 auto temp_ID_pos = small_mi_bf.get_id(aahash.hashes());
                 for (auto &ID_pos : temp_ID_pos)
                 {
                     auto pos = ID_pos & 0xFFFFFFFF;
+
                     if (gap_index_set.find(pos) != gap_index_set.end())
                     {
+                        vec_of_vec_of_pos[frame].push_back(pos);
+                        vec_of_vec_of_seq_pos[frame].push_back(aahash.get_pos());
                         // remove entry
                         gap_index_set.erase(pos);
-                        adjusted_kmer_counts++;
                         break;
                     }
                 }
-                prev_contains = true;
-            } else {
-                if (prev_contains) {
-                    // add to start_end_pos_vec
-                    adjusted_kmer_counts = adjusted_kmer_counts + rescue_kmer_size + 1;
-                }
-                prev_contains = false;
-            
             }
+            aahash.roll();
         }
     }
 
+    //std::cerr << "post frame" << std::endl;
+
+    for (size_t i = 0; i < 3; ++i) {
+        if (vec_of_vec_of_pos[i].size() == 0) {
+            continue;
+        }
+        size_t start_of_block = 0;
+        for (size_t j = 1; j < vec_of_vec_of_pos[i].size(); ++j) {
+            if (vec_of_vec_of_pos[i][j] - vec_of_vec_of_pos[i][j - 1] == 1) {
+                // check vec_of_vec_of_seq_pos[i][j] - vec_of_vec_of_seq_pos[i][j - 1] == 1
+                if (vec_of_vec_of_seq_pos[i][j] - vec_of_vec_of_seq_pos[i][j - 1] == 1) {
+                    continue;
+                } else {
+                    size_t length_of_block = j - 1 - start_of_block + 1;
+                    adjusted_kmer_counts += length_of_block + 3;
+                    start_of_block = j;
+                }
+            }
+        }
+        size_t length_of_block = vec_of_vec_of_pos[i].size() - 1 - start_of_block + 1;
+        adjusted_kmer_counts += length_of_block + 3;
+    }
+    //std::cerr << "post processing" << std::endl;
+    return;
+
+    // print out vec_of_vec_of_pos with all the pos found
+    /*for (size_t frame = 0; frame < 3; ++frame)
+    {
+        std::cerr << "frame: " << frame << "\t";
+        for (auto &pos : vec_of_vec_of_pos[frame])
+        {
+            std::cerr << pos << "\t";
+        }
+        std::cerr << std::endl;
+    }*/
 
 
-    for (auto &pos : gap_index_set)
+
+    /*for (auto &pos : gap_index_set)
     {
         btllib::AAHash aahash(sixframed_xlated_proteins[0 + ori * 3], hash_num, rescue_kmer_size, 1, pos);
         if (small_mi_bf.bv_contains(aahash.hashes()))
         {
             start_end_pos_vec.emplace_back(std::make_tuple(pos, pos + rescue_kmer_size));
         }
-    }
+    }*/
 }
 
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
@@ -479,6 +549,7 @@ int main(int argc, char **argv)
                   << "Threads: " << threads << "\n"
                   << "Hash number: " << (uint64_t)hash_num << "\n"
                   << "Kmer size: " << (uint64_t)kmer_size << "\n"
+                  << "Rescue kmer size: " << (uint64_t)rescue_kmer_size << "\n"
                   << "Genome size: " << genome_size << std::endl;
     }
 
@@ -547,7 +618,7 @@ int main(int argc, char **argv)
             
 
             while (itr.roll() && itr2.roll() && itr3.roll())
-            //while (itr.roll())
+            //while (itr3.roll())
             {
                 if (stage == 0)
                 {
@@ -576,6 +647,8 @@ int main(int argc, char **argv)
             mi_bf.complete_bv_insertion();
         }
     }
+    std::cerr << "Pop sat cnt: " << mi_bf.get_pop_saturated_cnt() << std::endl;
+    //exit(0);
     std::cerr << "finished making MiBF" << std::endl;
     std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
               << "\n";
@@ -648,9 +721,9 @@ int main(int argc, char **argv)
         std::cerr << "length of protein 1: " << sixframed_xlated_proteins[0].size() << std::endl;
         std::cerr << "length of protein 2: " << sixframed_xlated_proteins[1].size() << std::endl;
         std::cerr << "length of protein 3: " << sixframed_xlated_proteins[2].size() << std::endl;
-
-        // crate a protein fa file and write all proteins to it
-        std::ofstream protein_fa_file(output_prefix + record.id + ".fa");
+*/
+        //create a protein fa file and write all proteins to it
+        /*std::ofstream protein_fa_file(output_prefix + record.id + ".fa");
         protein_fa_file << ">" << record.id << "_1" << std::endl;
         protein_fa_file << sixframed_xlated_proteins[0] << std::endl;
         protein_fa_file << ">" << record.id << "_2" << std::endl;
@@ -670,6 +743,7 @@ int main(int argc, char **argv)
         // //std::cerr << "protein 6: " << sixframed_xlated_proteins[5] << std::endl;
 #pragma omp parallel for num_threads(2)
         for (size_t ori = 0; ori < 2; ++ori)
+        //for (size_t ori = 0; ori < 2; ++ori) //TODO
         {
             // frame to block id to id and smallest pos and largest pos
             std::vector<std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>>> frame_to_block_id_to_id_and_pos_vec(3);
@@ -682,6 +756,7 @@ int main(int argc, char **argv)
             };
             // id to set of frame and block id and seq pos, set is sorted by seq pos
             std::vector<std::unordered_map<uint32_t, std::set<std::tuple<size_t, size_t, size_t>, decltype(custom_comparator)>>> id_to_frame_block_id_and_seq_pos_vec(3);
+            //for (size_t curr_lvl = 1; curr_lvl <= 3; ++curr_lvl) {
             for (size_t curr_lvl = 1; curr_lvl <= 3; ++curr_lvl) {
                 auto& frame_to_block_id_to_id_and_pos = frame_to_block_id_to_id_and_pos_vec[curr_lvl - 1];
                 auto& id_to_count_across_all_frames = id_to_count_across_all_frames_vec[curr_lvl - 1];
@@ -689,6 +764,7 @@ int main(int argc, char **argv)
                 auto& gff_set = gff_set_vector[curr_lvl - 1];
                 auto& seq_name_to_completeness = seq_name_to_completeness_vec[curr_lvl - 1];
                 for (size_t frame = 0; frame < 3; ++frame)
+                //for (size_t frame = 0; frame < 1; ++frame)
                 {
 
                     /*if (verbose_flag) {
@@ -746,7 +822,7 @@ int main(int argc, char **argv)
                             break;
                         }
                         //std::cerr << "checkpoint 3" << std::endl;
-                        size_t seq_pos = aahash.get_pos() - kmer_size + 1;
+                        size_t seq_pos = aahash.get_pos() - 4;
                         // find the largest count in id_to_count
                         size_t temp_max_count = 0;
                         for (auto &ID_count : id_to_count)
@@ -940,15 +1016,21 @@ int main(int argc, char **argv)
                 for (auto &ID_count : id_to_count_across_all_frames)
                 {
                     uint32_t miBf_ID = ID_count.first;
-                    if (verbose_flag){
+                    /*if (verbose_flag){
                         std::cerr << "ID: " << ID_count.first << " count: " << ID_count.second << std::endl;
-                    }
+                    }*/
                     
                     // iterate through id to frame block id and seq pos and log the completeness
                     std::string seq_name = miBf_ID_to_seq_ID_and_len[miBf_ID].first;
+                    /*if (verbose_flag) {
+                        std::cerr << "calculating for protein name: " << seq_name << std::endl;
+                    }*/
                     size_t complete_copies = 0;
                     size_t incomplete_copies = 0;
                     size_t expected_kmer_counts = miBf_ID_to_seq_ID_and_len[miBf_ID].second - kmer_size + 1;
+                    /*if (verbose_flag) {
+                        std::cerr << "protein length: " << miBf_ID_to_seq_ID_and_len[miBf_ID].second << std::endl;
+                    }*/
                     size_t adjusted_kmer_counts = 0;
                     size_t end_pos = 0;
                     size_t frame = 3;
@@ -966,10 +1048,10 @@ int main(int argc, char **argv)
                     for (auto &frame_block_id_and_seq_pos : id_to_frame_block_id_and_seq_pos[miBf_ID])
                     {
                         if (verbose_flag) {
-                            std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                            std::cerr << "curr end_pos: " << end_pos << std::endl;
-                            std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(frame_block_id_and_seq_pos)][std::get<1>(frame_block_id_and_seq_pos)].first << std::endl;
-                            std::cerr << std::endl;
+                            //std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
+                            //std::cerr << "curr end_pos: " << end_pos << std::endl;
+                            //std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(frame_block_id_and_seq_pos)][std::get<1>(frame_block_id_and_seq_pos)].first << std::endl;
+                            //std::cerr << std::endl;
                         }
 
                         if (frame == 3) {
@@ -985,15 +1067,21 @@ int main(int argc, char **argv)
 
                         if (frame_to_block_id_to_id_and_pos[frame].find(block_id) != frame_to_block_id_to_id_and_pos[frame].end())
                         {
-                            if (start_end_pos_vec.empty()) {
-                                start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
-                                start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
-                            }
+
                         
                             prev_block_start = block_start;
                             block_start = std::get<2>(frame_block_id_and_seq_pos);
                             prev_block_len = block_len;
                             block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
+
+                            if (start_end_pos_vec.empty()) {
+                                start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));\
+                                //std::cerr << "empty" << std::endl;
+                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
+                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
+                                start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
+                            }
+
                             if (end_pos == 0)
                             {
                                 
@@ -1010,8 +1098,11 @@ int main(int argc, char **argv)
                             {
                                 if (end_pos < frame_to_block_id_to_id_and_pos[frame][block_id].first)
                                 {
+                                //std::cerr << "nonempty" << std::endl;
+                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
+                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
                                     start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
-                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
+                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
                                         adjusted_kmer_counts += block_len + kmer_size - 1;
                                     } else {
@@ -1027,19 +1118,28 @@ int main(int argc, char **argv)
                                 }
                                 else
                                 {
-                                    seq_end_in_nucleotide = (prev_block_start + prev_block_len )* 3 + frame;
+                                    seq_end_in_nucleotide = (prev_block_start + prev_block_len + kmer_size)* 3 + frame;
                                     // log completeness and reset
                                     if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
                                     {
                                         complete_copies++;
                                     }
-                                    else if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
+                                    else if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
                                     {
-                                        fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori);
-                                        incomplete_copies++;
+                                        //std::cerr << "attempting to gap fill1" << std::endl;
+                                        if (start_end_pos_vec.size() > 1) {
+                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl);
+                                        }
+                                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
+                                        //std::cerr << "done gap fill" << std::endl;
+                                        if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
+                                            complete_copies++;
+                                        } else {
+                                            incomplete_copies++;
+                                        }
                                     }
                                     double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
+                                    if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
                                     {
                                         if (strand == "-") {
                                             auto temp = seq_start_in_nucleotide;
@@ -1059,7 +1159,7 @@ int main(int argc, char **argv)
                                     start_end_pos_vec.clear();
                                     start_end_pos_tar_vec.clear();
                                     start_end_pos_vec.emplace_back(std::make_tuple(std::get<2>(frame_block_id_and_seq_pos), std::get<2>(frame_block_id_and_seq_pos) + block_len - 1));
-                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second));
+                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     //frame = 3; //bug fix problem with seq_start in nucleotide, 1 block off
                                     if (verbose_flag){
                                         std::cerr << "new end_pos: " << end_pos << std::endl;
@@ -1073,9 +1173,22 @@ int main(int argc, char **argv)
                     {
                         complete_copies++;
                     }
-                    else if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
+                    else if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
                     {
-                        incomplete_copies++;
+
+                        //std::cerr << "attempting to gap fill2" << std::endl;
+                        //std::cerr << "adjusted_kmer_counts: " << adjusted_kmer_counts << std::endl;
+                        if (start_end_pos_vec.size() > 1) {
+                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl);
+                        }
+                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
+                        //std::cerr << "done fill2" << std::endl;
+                        //std::cerr << "adjusted_kmer_counts: " << adjusted_kmer_counts << std::endl;
+                        if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
+                            complete_copies++;
+                        } else {
+                            incomplete_copies++;
+                        }
                     }
                     // log completeness
 #pragma omp atomic
@@ -1084,12 +1197,12 @@ int main(int argc, char **argv)
 #pragma omp atomic
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
 
-                    if (adjusted_kmer_counts > 0.9 * expected_kmer_counts)
+                    if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
                     {
 
                         const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
                         frame = std::get<0>(*last_frame_block_id_and_seq_pos);
-                        seq_end_in_nucleotide = (std::get<2>(*last_frame_block_id_and_seq_pos) + block_len ) * 3 + frame;
+                        seq_end_in_nucleotide = (std::get<2>(*last_frame_block_id_and_seq_pos) + block_len + kmer_size) * 3 + frame;
                         double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
                             if (strand == "-") {
                                 auto temp = seq_start_in_nucleotide;
