@@ -18,12 +18,20 @@ btllib_dep =  compiler.find_library('btllib')
 
 rootpath = meson.source_root()
 
-src_files = [ 'goldstandard.cpp' ]
+gs_src_files = [ 'goldstandard.cpp' ]
+make_mibf_src_files = [ 'make_mibf.cpp' ]
 deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep ]
 link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz' ]
 
 executable('goldstandard',
-    src_files,
+    gs_src_files,
+    dependencies : deps,
+    link_args : link_args,
+    install : true
+)
+
+executable('make_mibf',
+    make_mibf_src_files,
     dependencies : deps,
     link_args : link_args,
     install : true
