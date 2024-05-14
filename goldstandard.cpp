@@ -17,6 +17,12 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
+struct CustomComparator {
+    bool operator()(const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) const {
+        return std::get<2>(a) < std::get<2>(b);
+    }
+};
+
 size_t calc_optimal_size(size_t entries, unsigned hash_num, double occupancy)
 {
     size_t non64ApproxVal =
@@ -447,20 +453,24 @@ int main(int argc, char **argv)
     uint8_t kmer_size = 10;
     size_t rescue_kmer_size = 4;
     uint64_t genome_size = 0;
+    double lower_bound = 0.8;
+    std::string mibf_path = "";
     static struct option long_options[] = {
         {"help", no_argument, &help_flag, 1},
         {"verbose", no_argument, &verbose_flag, 1},
         {"threads", required_argument, 0, 't'},
         {"input", required_argument, 0, 'i'},
         {"reference", required_argument, 0, 'r'},
+        {"mibf_path", required_argument, 0, 'm'},
         {"output", required_argument, 0, 'o'},
         {"hash", required_argument, 0, 'h'},
         {"kmer", required_argument, 0, 'k'},
         {"genome", required_argument, 0, 'g'},
+        {"lower_bound", required_argument, 0, 'l'},
         {0, 0, 0, 0}};
 
     // loop through command line arguments
-    while ((opt = getopt_long(argc, argv, "g:h:i:t:o:r:k:", long_options, &option_index)) != -1)
+    while ((opt = getopt_long(argc, argv, "g:h:i:t:o:r:k:m:l:", long_options, &option_index)) != -1)
     {
         switch (opt)
         {
@@ -494,8 +504,14 @@ int main(int argc, char **argv)
         case 'k':
             kmer_size = std::stoi(optarg);
             break;
+        case 'm':
+            mibf_path = optarg;
+            break;
         case 'g':
             genome_size = std::stoul(optarg);
+            break;
+        case 'l':
+            lower_bound = std::stod(optarg);
             break;
         case '?':
             break;
@@ -550,7 +566,9 @@ int main(int argc, char **argv)
                   << "Hash number: " << (uint64_t)hash_num << "\n"
                   << "Kmer size: " << (uint64_t)kmer_size << "\n"
                   << "Rescue kmer size: " << (uint64_t)rescue_kmer_size << "\n"
-                  << "Genome size: " << genome_size << std::endl;
+                  << "Genome size: " << genome_size << "\n"
+                  << "Lower bound: " << lower_bound << "\n" 
+                  << std::endl;
     }
 
     omp_set_num_threads(threads);
@@ -568,7 +586,7 @@ int main(int argc, char **argv)
         genome_size += record.seq.size();
     }
 
-    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(std::max<size_t>(genome_size * 3, 1000000), hash_num, 0.1), hash_num);
+    //btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(std::max<size_t>(genome_size * 3, 1000000), hash_num, 0.1), hash_num);
     // btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(1000000000, hash_num, 0.1), hash_num);
 
     if (verbose_flag)
@@ -597,10 +615,15 @@ int main(int argc, char **argv)
     }
     if (verbose_flag)
     {
-        std::cerr << "Making miBF" << std::endl;
+        std::cerr << "Reading miBF" << std::endl;
     }
+    //strip suffix from reference path
+    //std::string reference path_no_suffix = reference path.substr(0, reference path.find_last_of("."));
+    
+  
     auto sTime = omp_get_wtime();
-    for (int stage = 0; stage < 3; stage++)
+    btllib::MIBloomFilter<uint64_t> mi_bf(mibf_path);
+    /*for (int stage = 0; stage < 3; stage++)
     {
         if (verbose_flag)
         {
@@ -647,14 +670,18 @@ int main(int argc, char **argv)
             mi_bf.complete_bv_insertion();
         }
     }
-    std::cerr << "Pop sat cnt: " << mi_bf.get_pop_saturated_cnt() << std::endl;
+    //std::cerr << "Pop sat cnt: " << mi_bf.get_pop_saturated_cnt() << std::endl;
     //exit(0);
+    */
     std::cerr << "finished making MiBF" << std::endl;
     std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
               << "\n";
+    
+    
 
     std::vector<std::ofstream> output_files(3);
     std::vector<std::ofstream> gff_files(3);
+    std::vector<std::ofstream> pre_gff_files(3);
 
     // Open each output file stream with a unique filename based on output_prefix
     for (int i = 0; i < 3; ++i) {
@@ -663,6 +690,8 @@ int main(int argc, char **argv)
         output_files[i] << "name\tcomplete copies\tincomplete copies\texpected k-mer counts\thighest adjusted incomplete k-mer hits" << std::endl;
         gff_files[i].open(output_prefix + "_lvl" + std::to_string(i + 1) + ".gff");
         gff_files[i] << "##gff-version 3" << std::endl;
+        pre_gff_files[i].open(output_prefix + "_lvl" + std::to_string(i + 1) + ".pre.gff");
+        pre_gff_files[i] << "##gff-version 3" << std::endl;
     }
 
 
@@ -687,6 +716,13 @@ int main(int argc, char **argv)
     for (int i = 0; i < 3; ++i) {
         gff_set_vector.emplace_back(gff_comparator);
     }
+
+   std::vector<std::set<std::tuple<std::string, size_t, size_t, double, std::string, std::string>, decltype(gff_comparator)>> pre_gff_set_vector;
+
+    for (int i = 0; i < 3; ++i) {
+        pre_gff_set_vector.emplace_back(gff_comparator);
+    }
+
 
     //auto& gff_set = gff_set_vector[0];
 
@@ -750,18 +786,19 @@ int main(int argc, char **argv)
             // id to count across all frames sorted by count largest to smallest
             std::vector<std::map<uint32_t, size_t, std::greater<size_t>>> id_to_count_across_all_frames_vec(3);
             // custom comparator for set of pair of size_t and pair of size_t and size_t to sort by seq pos
-            auto custom_comparator = [](const std::tuple<size_t, size_t, size_t> &a, const std::tuple<size_t, size_t, size_t> &b)
+            /*auto custom_comparator = [](const std::tuple<size_t, size_t, size_t> &a, const std::tuple<size_t, size_t, size_t> &b)
             {
                 return std::get<2>(a) < std::get<2>(b);
-            };
+            };*/
             // id to set of frame and block id and seq pos, set is sorted by seq pos
-            std::vector<std::unordered_map<uint32_t, std::set<std::tuple<size_t, size_t, size_t>, decltype(custom_comparator)>>> id_to_frame_block_id_and_seq_pos_vec(3);
+            std::vector<std::unordered_map<uint32_t, std::set<std::tuple<size_t, size_t, size_t>, CustomComparator>>> id_to_frame_block_id_and_seq_pos_vec(3);
             //for (size_t curr_lvl = 1; curr_lvl <= 3; ++curr_lvl) {
-            for (size_t curr_lvl = 1; curr_lvl <= 3; ++curr_lvl) {
+            for (size_t curr_lvl = 1; curr_lvl <= 1; ++curr_lvl) {
                 auto& frame_to_block_id_to_id_and_pos = frame_to_block_id_to_id_and_pos_vec[curr_lvl - 1];
                 auto& id_to_count_across_all_frames = id_to_count_across_all_frames_vec[curr_lvl - 1];
                 auto& id_to_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos_vec[curr_lvl - 1];
                 auto& gff_set = gff_set_vector[curr_lvl - 1];
+                auto& pre_gff_set = pre_gff_set_vector[curr_lvl - 1];
                 auto& seq_name_to_completeness = seq_name_to_completeness_vec[curr_lvl - 1];
                 for (size_t frame = 0; frame < 3; ++frame)
                 //for (size_t frame = 0; frame < 1; ++frame)
@@ -928,7 +965,28 @@ int main(int argc, char **argv)
                                 }
                                 else
                                 {
-                                    extend_block = false;
+                                    bool saturated = true;
+                                    for (auto &ID_pos : temp_ID_pos)
+                                    {
+                                        if (ID_pos < mi_bf.MASK)
+                                        {
+                                            saturated = false;
+                                            break;
+                                        }
+                                    }
+                                    if (!saturated)
+                                    {
+                                        extend_block = false;
+                                    } else {
+                                        extend_block = true;
+                                        for (auto& pos_set : id_to_pos_set) {
+                                            if (pos_set.second.size() == 0) {
+                                                continue;
+                                            } else {
+                                                pos_set.second.insert(*pos_set.second.rbegin() + 1);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             else
@@ -1120,12 +1178,14 @@ int main(int argc, char **argv)
                                 {
                                     seq_end_in_nucleotide = (prev_block_start + prev_block_len + kmer_size)* 3 + frame;
                                     // log completeness and reset
-                                    if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
+                                    double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
+
+                                    if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
-                                        complete_copies++;
-                                    }
-                                    else if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
-                                    {
+                                        /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
+                                        {
+                                            complete_copies++;
+                                        }*/
                                         //std::cerr << "attempting to gap fill1" << std::endl;
                                         if (start_end_pos_vec.size() > 1) {
                                             fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl);
@@ -1139,7 +1199,7 @@ int main(int argc, char **argv)
                                         }
                                     }
                                     double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
+                                    //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
                                         if (strand == "-") {
                                             auto temp = seq_start_in_nucleotide;
@@ -1148,6 +1208,7 @@ int main(int argc, char **argv)
                                         }
 #pragma omp critical
 {
+                                            pre_gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, prev_score, strand, seq_name));
                                             gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name));
 }
                                     }
@@ -1169,11 +1230,12 @@ int main(int argc, char **argv)
                             // block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
                         }
                     }
-                    if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
+                    double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
+                    /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
                     {
                         complete_copies++;
                     }
-                    else if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
+                    else*/ if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
 
                         //std::cerr << "attempting to gap fill2" << std::endl;
@@ -1197,7 +1259,7 @@ int main(int argc, char **argv)
 #pragma omp atomic
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
 
-                    if (adjusted_kmer_counts > 0.8 * expected_kmer_counts)
+                    //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
 
                         const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
@@ -1212,7 +1274,7 @@ int main(int argc, char **argv)
 
 #pragma omp critical
                         {
-
+                            pre_gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, prev_score, strand, seq_name));
                             gff_set.insert(std::make_tuple(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name));
                         }
                     }
@@ -1239,6 +1301,18 @@ int main(int argc, char **argv)
         for (auto &gff : gff_set)
         {
             gff_files[i] << std::get<0>(gff) << "\t"
+                            << "."
+                            << "\t"
+                            << "gene"
+                            << "\t" << std::get<1>(gff) << "\t" << std::get<2>(gff) << "\t" << std::get<3>(gff) << "\t" << std::get<4>(gff) << "\t"
+                            << "0"
+                            << "\t"
+                            << "ID=" << std::get<5>(gff) << std::endl;
+        }
+        auto& pre_gff_set = pre_gff_set_vector[i];
+        for (auto &gff : pre_gff_set)
+        {
+            pre_gff_files[i] << std::get<0>(gff) << "\t"
                             << "."
                             << "\t"
                             << "gene"
