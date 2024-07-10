@@ -27,7 +27,8 @@ void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set
     {
         for (auto &ID_pos : temp_ID_pos)
         {
-            if (ID == (ID_pos >> 32))
+            auto demasked_ID_pos = ID_pos & mi_bf.ANTI_MASK;
+            if (ID == (demasked_ID_pos >> 32))
             {
                 found = true;
                 break;
@@ -43,8 +44,9 @@ void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set
     {
         for (auto &ID_pos : temp_ID_pos)
         {
-            ids_vec.push_back(ID_pos >> 32);
-            temp_pos_vec.push_back(ID_pos & 0xFFFFFFFF);
+            auto demasked_ID_pos = ID_pos & mi_bf.ANTI_MASK;
+            ids_vec.push_back(demasked_ID_pos >> 32);
+            temp_pos_vec.push_back(demasked_ID_pos & 0xFFFFFFFF);
         }
         std::vector<uint32_t> new_pos;
         std::vector<uint32_t> new_ids;
@@ -319,7 +321,11 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     for (size_t frame = 0; frame < 3; ++frame)
     {
         btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, level, start_of_first_gap - 1);
+        btllib::AAHash aahash2(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, 2, start_of_first_gap - 1);
+        btllib::AAHash aahash3(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, 3, start_of_first_gap - 1);
         aahash.roll();
+        aahash2.roll();
+        aahash3.roll();
         //bool prev_contains = false;
         while(aahash.get_pos() <= end_of_last_gap + 1)
         {
@@ -341,9 +347,47 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
                         gap_index_set.erase(pos);
                         break;
                     }
-                }
+                } 
+            } else if (small_mi_bf.bv_contains(aahash2.hashes()))
+            {
+                // get pos of mibf entry
+
+                auto temp_ID_pos = small_mi_bf.get_id(aahash2.hashes());
+                for (auto &ID_pos : temp_ID_pos)
+                {
+                    auto pos = ID_pos & 0xFFFFFFFF;
+
+                    if (gap_index_set.find(pos) != gap_index_set.end())
+                    {
+                        vec_of_vec_of_pos[frame].push_back(pos);
+                        vec_of_vec_of_seq_pos[frame].push_back(aahash2.get_pos());
+                        // remove entry
+                        gap_index_set.erase(pos);
+                        break;
+                    }
+                } 
+            } else if (small_mi_bf.bv_contains(aahash3.hashes()))
+            {
+                // get pos of mibf entry
+
+                auto temp_ID_pos = small_mi_bf.get_id(aahash3.hashes());
+                for (auto &ID_pos : temp_ID_pos)
+                {
+                    auto pos = ID_pos & 0xFFFFFFFF;
+
+                    if (gap_index_set.find(pos) != gap_index_set.end())
+                    {
+                        vec_of_vec_of_pos[frame].push_back(pos);
+                        vec_of_vec_of_seq_pos[frame].push_back(aahash3.get_pos());
+                        // remove entry
+                        gap_index_set.erase(pos);
+                        break;
+                    }
+                } 
             }
             aahash.roll();
+            aahash2.roll();
+            aahash3.roll();
         }
     }
 
@@ -443,8 +487,9 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     auto temp_ID_pos = mi_bf.get_id(aahash.hashes());
     for (auto &ID_pos : temp_ID_pos)
     {
-        miBf_IDs_snapshot.back().push_back(ID_pos >> 32);
-        miBf_pos_snapshot.back().push_back(ID_pos & 0xFFFFFFFF);
+        auto demasked_ID_pos = ID_pos  & mi_bf.ANTI_MASK;
+        miBf_IDs_snapshot.back().push_back(demasked_ID_pos >> 32);
+        miBf_pos_snapshot.back().push_back(demasked_ID_pos & 0xFFFFFFFF);
     }
 
     for (size_t j = 0; j < miBf_IDs_snapshot.back().size(); ++j)
