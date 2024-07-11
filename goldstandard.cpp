@@ -444,7 +444,7 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     }*/
 }
 
-bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
+bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count, btllib::AAHash &aahash2, btllib::AAHash &aahash3)
 {
     // check size of miBf_IDs_snapshot and miBf_pos_snapshot
     //  if size is more than 10, pop front
@@ -474,7 +474,14 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     miBf_IDs_snapshot.emplace_back(std::vector<uint32_t>());
     miBf_pos_snapshot.emplace_back(std::vector<uint32_t>());
 
+    int hash_lvl = 1;
     if (!mi_bf.bv_contains(aahash.hashes()))
+    {
+        hash_lvl = 2;
+    } else if (!mi_bf.bv_contains(aahash2.hashes()))
+    {
+        hash_lvl = 3;
+    } else if (!mi_bf.bv_contains(aahash3.hashes()))
     {
         // clear snapshots and id_to_count
         miBf_IDs_snapshot.clear();
@@ -484,7 +491,17 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     }
 
     // query mibf and insert into both deques
-    auto temp_ID_pos = mi_bf.get_id(aahash.hashes());
+    decltype(mi_bf.get_id(aahash.hashes())) temp_ID_pos;
+    if (hash_lvl == 1)
+    {
+        temp_ID_pos = mi_bf.get_id(aahash.hashes());
+    } else if (hash_lvl == 2)
+    {
+        temp_ID_pos = mi_bf.get_id(aahash2.hashes());
+    } else if (hash_lvl == 3)
+    {
+        temp_ID_pos = mi_bf.get_id(aahash3.hashes());
+    }
     for (auto &ID_pos : temp_ID_pos)
     {
         auto demasked_ID_pos = ID_pos  & mi_bf.ANTI_MASK;
@@ -1091,7 +1108,7 @@ int main(int argc, char **argv)
                     while (aahash.get_pos() != std::numeric_limits<size_t>::max())
                     {
                         //// std::cerr << "checkpoint 1" << std::endl;
-                        while (!explore_frame(mi_bf, aahash, miBf_IDs_snapshot, miBf_pos_snapshot, id_to_count) && aahash.get_pos() != std::numeric_limits<size_t>::max())
+                        while (!explore_frame(mi_bf, aahash, miBf_IDs_snapshot, miBf_pos_snapshot, id_to_count, aahash2, aahash3) && aahash.get_pos() != std::numeric_limits<size_t>::max())
                         {
                             // //std::cerr << "explore_frame returned false" << std::endl;
                             aahash.roll();
@@ -1104,7 +1121,7 @@ int main(int argc, char **argv)
                             break;
                         }
                         //// std::cerr << "checkpoint 3" << std::endl;
-                        size_t seq_pos = aahash.get_pos() - 4;
+                        size_t seq_pos = aahash.get_pos() - 4; //TODO
                         // find the largest count in id_to_count
                         size_t temp_max_count = 0;
                         for (auto &ID_count : id_to_count)
