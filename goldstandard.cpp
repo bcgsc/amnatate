@@ -17,7 +17,21 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
-size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
+bool overlaps(const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) {
+    return !(std::get<1>(a) < std::get<0>(b) || std::get<1>(b) < std::get<0>(a));
+}
+
+// Function to check if one interval is less than another considering start, end, and nuc_start
+bool is_less_than(const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) {
+    return std::get<0>(a) < std::get<0>(b) && std::get<1>(a) < std::get<1>(b) && std::get<2>(a) < std::get<2>(b);
+}
+
+// Function to check if two intervals can be part of a monotonically increasing sequence
+bool can_be_increasing(const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) {
+    return std::get<0>(a) < std::get<0>(b) && std::get<1>(a) <= std::get<0>(b) && std::get<2>(a) < std::get<2>(b);
+}
+
+/*size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
                  const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
 
     if (ref_idx + 1 >= vec.size()) {
@@ -49,7 +63,7 @@ size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &
     }
 
     return offset;
-}
+}*/
 
 void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set, 
                     std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block, 
@@ -1310,22 +1324,26 @@ int main(int argc, char **argv)
                     }*/
                     size_t complete_copies = 0;
                     size_t incomplete_copies = 0;
-                    size_t expected_kmer_counts = miBf_ID_to_seq_ID_and_len[miBf_ID].second - kmer_size + 1;
+                    //size_t expected_kmer_counts = miBf_ID_to_seq_ID_and_len[miBf_ID].second - kmer_size + 1;
                     /*if (verbose_flag) {
                         std::cerr << "protein length: " << miBf_ID_to_seq_ID_and_len[miBf_ID].second << std::endl;
                     }*/
-                    size_t adjusted_kmer_counts = 0;
-                    size_t end_pos = 0;
+                    //size_t adjusted_kmer_counts = 0;
+                    //size_t end_pos = 0;
+                    //end_pos = 1; //temp
                     size_t frame = 3;
                     size_t seq_start_in_nucleotide = 0;
                     size_t seq_end_in_nucleotide = 0;
-                    size_t block_len = 0;
-                    size_t prev_block_len = 0;
-                    size_t block_start = 0;
-                    size_t prev_block_start = 0;
+                    //size_t block_len = 0;
+                    //size_t prev_block_len = 0;
+                    //size_t block_start = 0;
+                    //size_t prev_block_start = 0;
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_vec;
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_tar_vec;
                     //std::cerr << "calculating for protein name: " << seq_name << std::endl;
+
+                    std::vector<std::tuple<size_t, size_t, size_t>> intervals_in_target_space_and_nuc_start_vec;
+
 
                     
                     std::vector<std::reference_wrapper<const frame_block>> vec;
@@ -1352,6 +1370,7 @@ int main(int argc, char **argv)
                         }
 
                         size_t block_id = frame_block_id_and_seq_pos.block_id;
+
                         // std::cerr << "checkpoint 1" << std::endl;
 
 
@@ -1360,146 +1379,149 @@ int main(int argc, char **argv)
                         {
 
                         
-                            prev_block_start = block_start;
-                            block_start = frame_block_id_and_seq_pos.query_start_in_prot_space;
-                            prev_block_len = block_len;
-                            block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
+                            //prev_block_start = block_start;
+                            //block_start = frame_block_id_and_seq_pos.query_start_in_prot_space;
+                            //prev_block_len = block_len;
+                            //size_t block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
+                            intervals_in_target_space_and_nuc_start_vec.emplace_back(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second, frame_block_id_and_seq_pos.query_start_in_prot_space * 3 + frame);
                             
-                            // std::cerr << "checkpoint 2" << std::endl;
-
-                            if (start_end_pos_vec.empty()) {
-                                start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));\
-                                //std::cerr << "empty" << std::endl;
-                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
-                                start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
-                            }
-
-                            // std::cerr << "checkpoint 3" << std::endl;
-
-                            if (end_pos == 0)
-                            {
-                                
-                                end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
-                                if (verbose_flag){
-                                    std::cerr << "start end_pos: " << end_pos << std::endl;
-                                    std::cerr << std::endl;
-                                }
-                                
-                                
-                                adjusted_kmer_counts = block_len;
-                                // std::cerr << "checkpoint 3.1" << std::endl;
-                            }
-                            else
-                            {
-                                if (end_pos < frame_to_block_id_to_id_and_pos[frame][block_id].first)
-                                {
-                                //std::cerr << "nonempty" << std::endl;
-                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
-                                    start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
-                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
-                                    if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
-                                        adjusted_kmer_counts += block_len + kmer_size - 1; //TODO adjust for kmer size overlap
-                                    } else {
-                                        adjusted_kmer_counts += block_len + frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos - 1;
-                                    }
-                                    
-
-                                    end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
-                                    if (verbose_flag){
-                                        std::cerr << "update end_pos: " << end_pos << std::endl;
-                                        std::cerr << std::endl;
-                                    }
-                                    // std::cerr << "checkpoint 3.2.1" << std::endl;
-
-                                    // look ahead code
-                                    if (ref_idx + 2 < vec.size()) {
-                                        const frame_block &next_frame_block_id_and_seq_pos = vec[ref_idx + 1].get();
-                                        auto next_block_id = next_frame_block_id_and_seq_pos.block_id;
-                                        auto next_frame = next_frame_block_id_and_seq_pos.frame;
-                                        const frame_block &next_next_frame_block_id_and_seq_pos = vec[ref_idx + 2].get();
-                                        auto next_next_block_id = next_next_frame_block_id_and_seq_pos.block_id;
-                                        auto next_next_frame = next_next_frame_block_id_and_seq_pos.frame;
-                                        if (end_pos < frame_to_block_id_to_id_and_pos[next_frame][next_block_id].first) {
-                                            continue;
-                                        } else {
-                                            if (end_pos < frame_to_block_id_to_id_and_pos[next_next_frame][next_next_block_id].first) {
-                                                ref_idx += 1;
-                                            } else {
-                                                continue;
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    seq_end_in_nucleotide = (prev_block_start + prev_block_len + kmer_size - 1)* 3 + frame;
-                                    // log completeness and reset
-                                    double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    // std::cerr << "checkpoint 3.2.2.1" << std::endl;
-
-                                    if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
-                                    {
-                                        /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
-                                        {
-                                            complete_copies++;
-                                        }*/
-                                        //std::cerr << "attempting to gap fill1" << std::endl;
-                                        //std::cerr << "mibf_id: " << miBf_ID << std::endl;
-                                        if (start_end_pos_vec.size() > 1) {
-                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, threads);
-                                        }
-                                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
-                                        //std::cerr << "done gap fill" << std::endl;
-                                        if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
-                                            complete_copies++;
-                                        } else {
-                                            incomplete_copies++;
-                                        }
-                                    }
-                                    // std::cerr << "checkpoint 3.2.2.2" << std::endl;
-                                    double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
-                                    {
-                                        if (strand == "-") {
-                                            auto temp = seq_start_in_nucleotide;
-                                            seq_start_in_nucleotide = record.seq.size() - seq_end_in_nucleotide;
-                                            seq_end_in_nucleotide = record.seq.size() - temp;
-                                        }
-#pragma omp critical
-{
-                                            pre_gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, prev_score, strand, seq_name);
-                                            gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name);
-}
-                                    }
-                                    // std::cerr << "checkpoint 3.2.2.3" << std::endl;
-                                    
-                                    end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
-                                    adjusted_kmer_counts = block_len;
-                                    seq_start_in_nucleotide = frame_block_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
-                                    // clear start_end_pos_vec and start_end_pos_tar_vec
-                                    start_end_pos_vec.clear();
-                                    start_end_pos_tar_vec.clear();
-                                    start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
-                                    start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
-                                    //frame = 3; //bug fix problem with seq_start in nucleotide, 1 block off
-                                    // std::cerr << "checkpoint 3.2.2.4" << std::endl;
-                                    if (verbose_flag){
-                                        std::cerr << "new end_pos: " << end_pos << std::endl;
-                                    }
-                                }
-                            }
-                            // block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
+ 
                         }
                     }
-                    double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
+                    // print intervals_in_target_space_and_nuc_start_vec
+                    std::cerr << "Intervals in target space and nucleotide start: " << std::endl;
+
+                        for (auto &interval : intervals_in_target_space_and_nuc_start_vec) {
+                            std::cerr << "start: " << std::get<0>(interval) << " end: " << std::get<1>(interval) << " nuc_start: " << std::get<2>(interval) << std::endl;
+                        }
+
+
+
+                    std::vector<std::tuple<size_t, size_t, size_t>> non_overlapping_intervals;
+                    std::vector<std::tuple<size_t, size_t, size_t>> overlapping_intervals;
+
+                    // Identify non-overlapping and overlapping intervals
+                    for (size_t i = 0; i < intervals_in_target_space_and_nuc_start_vec.size(); ++i) {
+                        bool has_overlap = false;
+                        for (size_t j = 0; j < intervals_in_target_space_and_nuc_start_vec.size(); ++j) {
+                            if (i != j && overlaps(intervals_in_target_space_and_nuc_start_vec[i], intervals_in_target_space_and_nuc_start_vec[j])) {
+                                has_overlap = true;
+                                break;
+                            }
+                        }
+                        if (!has_overlap) {
+                            non_overlapping_intervals.push_back(intervals_in_target_space_and_nuc_start_vec[i]);
+                        } else {
+                            overlapping_intervals.push_back(intervals_in_target_space_and_nuc_start_vec[i]);
+                        }
+                    }
+                    // print non_overlapping_intervals
+                    std::cerr << "Non-overlapping intervals: " << std::endl;
+                    for (auto &interval : non_overlapping_intervals) {
+                        std::cerr << "start: " << std::get<0>(interval) << " end: " << std::get<1>(interval) << " nuc_start: " << std::get<2>(interval) << std::endl;
+                    }
+
+                    // print overlapping_intervals
+                    std::cerr << "Overlapping intervals: " << std::endl;
+                    for (auto &interval : overlapping_intervals) {
+                        std::cerr << "start: " << std::get<0>(interval) << " end: " << std::get<1>(interval) << " nuc_start: " << std::get<2>(interval) << std::endl;
+                    }
+
+                    // Sort non-overlapping intervals based on nuc_start
+                    std::sort(non_overlapping_intervals.begin(), non_overlapping_intervals.end(),
+                        [](const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) {
+                            return std::get<2>(a) < std::get<2>(b);
+                        });
+
+                    size_t n = non_overlapping_intervals.size();
+                    std::vector<int> dp(n, 0);
+                    std::vector<int> prev(n, -1);
+
+                    // Initialize dp array
+                    for (size_t i = 0; i < n; ++i) {
+                        dp[i] = std::get<1>(non_overlapping_intervals[i]) - std::get<0>(non_overlapping_intervals[i]);
+                    }
+
+                    // Compute maximum coverage with dynamic programming
+                    for (size_t i = 1; i < n; ++i) {
+                        for (size_t j = 0; j < i; ++j) {
+                            if (can_be_increasing(non_overlapping_intervals[j], non_overlapping_intervals[i])) {
+                                if (dp[i] < dp[j] + static_cast<int>(std::get<1>(non_overlapping_intervals[i]) - std::get<0>(non_overlapping_intervals[i]))) {
+                                    dp[i] = dp[j] + static_cast<int>(std::get<1>(non_overlapping_intervals[i]) - std::get<0>(non_overlapping_intervals[i]));
+                                    prev[i] = j;
+                                }
+                            }
+                        }
+                    }
+
+                    // Find the index of the maximum value in dp array
+                    size_t max_index = std::distance(dp.begin(), std::max_element(dp.begin(), dp.end()));
+                    int max_coverage = dp[max_index];
+
+                    // Retrieve the combination of intervals
+                    std::vector<std::tuple<size_t, size_t, size_t>> result;
+                    for (int i = static_cast<int>(max_index); i != -1; i = prev[i]) {
+                        result.push_back(non_overlapping_intervals[i]);
+                    }
+
+                    // Try to include intervals from the overlapping intervals
+                    for (const auto& interval : overlapping_intervals) {
+                        std::vector<std::tuple<size_t, size_t, size_t>> temp_result;
+                        int temp_coverage = 0;
+                        bool can_include = true;
+                        size_t last_end = 0;
+                        size_t last_nuc_start = 0;
+
+                        for (const auto& res_interval : result) {
+                            if (std::get<0>(interval) < std::get<1>(res_interval) && std::get<1>(interval) > std::get<0>(res_interval)) {
+                                can_include = false;
+                                break;
+                            }
+                            if (std::get<2>(interval) < std::get<2>(res_interval)) {
+                                can_include = false;
+                                break;
+                            }
+                        }
+
+                        if (can_include) {
+                            temp_result.push_back(interval);
+                            temp_coverage += std::get<1>(interval) - std::get<0>(interval);
+                            last_end = std::get<1>(interval);
+                            last_nuc_start = std::get<2>(interval);
+
+                            for (const auto& res_interval : result) {
+                                if (std::get<0>(res_interval) >= last_end && std::get<2>(res_interval) > last_nuc_start) {
+                                    temp_result.push_back(res_interval);
+                                    temp_coverage += std::get<1>(res_interval) - std::get<0>(res_interval);
+                                    last_end = std::get<1>(res_interval);
+                                    last_nuc_start = std::get<2>(res_interval);
+                                }
+                            }
+
+                            if (temp_coverage > max_coverage) {
+                                max_coverage = temp_coverage;
+                                result = temp_result;
+                            }
+                        }
+                    }
+
+                    // Print the maximum coverage
+                    std::cout << "Maximum coverage of non-overlapping intervals: " << max_coverage << std::endl;
+
+                    // Print the combination of intervals achieving the maximum coverage
+                    std::cout << "Intervals achieving maximum coverage: ";
+                    for (auto it = result.rbegin(); it != result.rend(); ++it) {
+                        std::cout << "(" << std::get<0>(*it) << ", " << std::get<1>(*it) << ", " << std::get<2>(*it) << ") ";
+                    }
+                    std::cout << std::endl;
+                    //double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
                     // std::cerr << "checkpoint 4" << std::endl;
                     /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
                     {
                         complete_copies++;
                     }
-                    else*/ if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
+                    else*/ 
+                    /*if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
 
 
@@ -1518,18 +1540,20 @@ int main(int argc, char **argv)
                         }
 
                         // std::cerr << "checkpoint 4.1" << std::endl;
-                    }
+                    }*/
                     // log completeness
+                    
 #pragma omp atomic
                     seq_name_to_completeness[seq_name].complete_copies += complete_copies;
 
 #pragma omp atomic
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
+                    
 
                     //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
 
-                        const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
+                        /*const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
                         frame = (*last_frame_block_id_and_seq_pos).frame;
                         seq_end_in_nucleotide = ((*last_frame_block_id_and_seq_pos).query_start_in_prot_space + block_len + kmer_size - 1) * 3 + frame;
                         // print all the values that make seq_end_in_nucleotide
@@ -1538,10 +1562,14 @@ int main(int argc, char **argv)
                                 auto temp = seq_start_in_nucleotide;
                                 seq_start_in_nucleotide = record.seq.size() - seq_end_in_nucleotide;
                                 seq_end_in_nucleotide = record.seq.size() - temp;
-                            }
+                            }*/
 
 #pragma omp critical
                         {
+                            float prev_score = 1.0; //temp
+                            float score = 1.0; //temp
+                            std::string strand = "+"; //temp
+                            std::string seq_name = "test"; //temp
                             pre_gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, prev_score, strand, seq_name);
                             gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name);
                         }

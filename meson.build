@@ -36,3 +36,6 @@ executable('make_mibf',
     link_args : link_args,
     install : true
 )
+
+scripts = ['goldstandard_run_pipeline.smk']
+install_data(scripts, install_dir : 'bin', install_mode : 'rwxr-xr--')

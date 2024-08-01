@@ -111,12 +111,6 @@ int main(int argc, char **argv)
         exit(0);
     }
 
-    // print error message if input file is not provided
-    if (input_file.empty())
-    {
-        std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
-        exit(1);
-    }
 
     // print error message if reference path is not provided
     if (reference_path.empty())
@@ -241,6 +235,6 @@ int main(int argc, char **argv)
     std::cerr << "finished making MiBF" << std::endl;
     std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
               << "\n";
-
-    mi_bf.save(output_prefix + "_miBF");
+    std::string reference_path_no_suffix = reference_path.substr(0, reference_path.find_last_of("."));
+    mi_bf.save(reference_path_no_suffix + ".mibf");
 }
