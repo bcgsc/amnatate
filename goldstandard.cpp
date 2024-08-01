@@ -17,6 +17,40 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
+size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
+                 const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
+
+    if (ref_idx + 1 >= vec.size()) {
+        return 0;
+    }
+
+    // Special logic for the first position check
+    const frame_block &next_frame_block = vec[ref_idx + 1].get();
+    auto next_block_id = next_frame_block.block_id;
+    auto next_frame = next_frame_block.frame;
+
+    if (end_pos < frame_to_block_id_to_id_and_pos.at(next_frame).at(next_block_id).first) {
+        return 0;
+    }
+
+    // General logic for subsequent positions
+    for (size_t i = 2; i <= offset; ++i) {
+        if (ref_idx + i >= vec.size()) {
+            return 0;
+        }
+
+        const frame_block &frame_block_i = vec[ref_idx + i].get();
+        auto block_id = frame_block_i.block_id;
+        auto frame = frame_block_i.frame;
+
+        if (end_pos < frame_to_block_id_to_id_and_pos.at(frame).at(block_id).first) {
+            return i - 1;
+        }
+    }
+
+    return offset;
+}
+
 void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set, 
                     std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block, 
                     std::vector<uint32_t>& ids_vec, std::vector<uint32_t>& temp_pos_vec, const btllib::MIBloomFilter<uint64_t>& mi_bf)
@@ -1294,9 +1328,14 @@ int main(int argc, char **argv)
                     //std::cerr << "calculating for protein name: " << seq_name << std::endl;
 
                     
-                    
+                    std::vector<std::reference_wrapper<const frame_block>> vec;
                     for (auto &frame_block_id_and_seq_pos : id_to_frame_block_id_and_seq_pos[miBf_ID])
                     {
+                        vec.push_back(frame_block_id_and_seq_pos);
+                    }
+                    for (size_t ref_idx = 0; ref_idx < vec.size(); ++ref_idx)
+                    {
+                        const frame_block &frame_block_id_and_seq_pos = vec[ref_idx].get();
 
                         if (verbose_flag) {
                             //std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
@@ -1361,7 +1400,7 @@ int main(int argc, char **argv)
                                     start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
                                     start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
-                                        adjusted_kmer_counts += block_len + kmer_size - 1;
+                                        adjusted_kmer_counts += block_len + kmer_size - 1; //TODO adjust for kmer size overlap
                                     } else {
                                         adjusted_kmer_counts += block_len + frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos - 1;
                                     }
@@ -1373,6 +1412,25 @@ int main(int argc, char **argv)
                                         std::cerr << std::endl;
                                     }
                                     // std::cerr << "checkpoint 3.2.1" << std::endl;
+
+                                    // look ahead code
+                                    if (ref_idx + 2 < vec.size()) {
+                                        const frame_block &next_frame_block_id_and_seq_pos = vec[ref_idx + 1].get();
+                                        auto next_block_id = next_frame_block_id_and_seq_pos.block_id;
+                                        auto next_frame = next_frame_block_id_and_seq_pos.frame;
+                                        const frame_block &next_next_frame_block_id_and_seq_pos = vec[ref_idx + 2].get();
+                                        auto next_next_block_id = next_next_frame_block_id_and_seq_pos.block_id;
+                                        auto next_next_frame = next_next_frame_block_id_and_seq_pos.frame;
+                                        if (end_pos < frame_to_block_id_to_id_and_pos[next_frame][next_block_id].first) {
+                                            continue;
+                                        } else {
+                                            if (end_pos < frame_to_block_id_to_id_and_pos[next_next_frame][next_next_block_id].first) {
+                                                ref_idx += 1;
+                                            } else {
+                                                continue;
+                                            }
+                                        }
+                                    }
                                 }
                                 else
                                 {
