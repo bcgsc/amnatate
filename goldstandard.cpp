@@ -17,6 +17,22 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
+struct frame_block {
+    size_t frame;
+    size_t block_id;
+    size_t query_start_in_prot_space;
+
+    // Constructor for convenience
+    frame_block(size_t f, size_t b, size_t q) : frame(f), block_id(b), query_start_in_prot_space(q) {}
+};
+
+// Define the comparator for FrameBlock
+struct frame_block_comparator {
+    bool operator()(const frame_block& a, const frame_block& b) const {
+        return a.query_start_in_prot_space < b.query_start_in_prot_space;
+    }
+};
+
 size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
                  const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
 
@@ -703,21 +719,7 @@ struct gff_entry_comparator {
     }
 };
 
-struct frame_block {
-    size_t frame;
-    size_t block_id;
-    size_t query_start_in_prot_space;
 
-    // Constructor for convenience
-    frame_block(size_t f, size_t b, size_t q) : frame(f), block_id(b), query_start_in_prot_space(q) {}
-};
-
-// Define the comparator for FrameBlock
-struct frame_block_comparator {
-    bool operator()(const frame_block& a, const frame_block& b) const {
-        return a.query_start_in_prot_space < b.query_start_in_prot_space;
-    }
-};
 
 // main function that takes in command line arguments using getopt
 int main(int argc, char **argv)
