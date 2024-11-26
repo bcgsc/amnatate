@@ -808,35 +808,35 @@ int main(int argc, char **argv)
     // print help message with required arguments
     if (help_flag)
     {
-        //std::cerr << "Usage: " << argv[0] << " [options]" << std::endl;
-        //std::cerr << "Options:" << std::endl;
-        //std::cerr << "  -h, --help\t\t\tPrint this help message" << std::endl;
-        //std::cerr << "  -i, --input\t\t\tInput file name" << std::endl;
-        //std::cerr << "  -o, --output\t\t\tOutput prefix" << std::endl;
-        //std::cerr << "  -r, --reference\t\tReference path" << std::endl;
-        //std::cerr << "  -t, --threads\t\t\tNumber of threads to use (default: 1)" << std::endl;
-        //std::cerr << "  -v, --verbose\t\t\tVerbose output" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " [options]" << std::endl;
+        std::cerr << "Options:" << std::endl;
+        std::cerr << "  -h, --help\t\t\tPrint this help message" << std::endl;
+        std::cerr << "  -i, --input\t\t\tInput file name" << std::endl;
+        std::cerr << "  -o, --output\t\t\tOutput prefix" << std::endl;
+        std::cerr << "  -r, --reference\t\tReference path" << std::endl;
+        std::cerr << "  -t, --threads\t\t\tNumber of threads to use (default: 1)" << std::endl;
+        std::cerr << "  -v, --verbose\t\t\tVerbose output" << std::endl;
         exit(0);
     }
 
     // print error message if input file is not provided
     if (input_file.empty())
     {
-        //std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
+        std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print error message if reference path is not provided
     if (reference_path.empty())
     {
-        //std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
+        std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
     // print error message if threads is not provided
     if (threads == 0)
     {
-        //std::cerr << "Threads is required. Use -h or --help for more information." << std::endl;
+        std::cerr << "Threads is required. Use -h or --help for more information." << std::endl;
         exit(1);
     }
 
