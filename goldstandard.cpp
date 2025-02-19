@@ -269,7 +269,7 @@ btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t h
 
 }
 
-void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, const std::string& seq, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori, size_t kmer_size, size_t level, size_t threads)
+void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori, size_t kmer_size, size_t level, uint32_t miBf_ID)
 {
 
     //sort start_end_pos_vec by start_pos
@@ -351,8 +351,9 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     //std::cerr << "hash_num: " << hash_num << std::endl;
     //std::cerr << "rescue_kmer_size: " << rescue_kmer_size << std::endl;
   //omp_set_num_threads(1);
-    auto small_mi_bf = make_mibf(seq, hash_num, rescue_kmer_size);
-  omp_set_num_threads(threads);
+    //auto small_mi_bf = make_mibf(seq, hash_num, rescue_kmer_size);
+    std::string small_mibf_path = std::to_string(miBf_ID) + ".mibf";
+    btllib::MIBloomFilter<uint64_t> small_mi_bf(small_mibf_path);
     // std::cerr << "checkpoint d.2" << std::endl;
 
     //std::cerr << "done mibf" << std::endl;
@@ -494,7 +495,7 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     }*/
 }
 
-bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count, btllib::AAHash &aahash2, btllib::AAHash &aahash3)
+bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
 {
     // check size of miBf_IDs_snapshot and miBf_pos_snapshot
     //  if size is more than 10, pop front
@@ -524,14 +525,8 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     miBf_IDs_snapshot.emplace_back(std::vector<uint32_t>());
     miBf_pos_snapshot.emplace_back(std::vector<uint32_t>());
 
-    int hash_lvl = 1;
+
     if (!mi_bf.bv_contains(aahash.hashes()))
-    {
-        hash_lvl = 2;
-    } else if (!mi_bf.bv_contains(aahash2.hashes()))
-    {
-        hash_lvl = 3;
-    } else if (!mi_bf.bv_contains(aahash3.hashes()))
     {
         // clear snapshots and id_to_count
         miBf_IDs_snapshot.clear();
@@ -541,17 +536,7 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
     }
 
     // query mibf and insert into both deques
-    decltype(mi_bf.get_id(aahash.hashes())) temp_ID_pos;
-    if (hash_lvl == 1)
-    {
-        temp_ID_pos = mi_bf.get_id(aahash.hashes());
-    } else if (hash_lvl == 2)
-    {
-        temp_ID_pos = mi_bf.get_id(aahash2.hashes());
-    } else if (hash_lvl == 3)
-    {
-        temp_ID_pos = mi_bf.get_id(aahash3.hashes());
-    }
+    auto temp_ID_pos = mi_bf.get_id(aahash.hashes());
     for (auto &ID_pos : temp_ID_pos)
     {
         auto demasked_ID_pos = ID_pos  & mi_bf.ANTI_MASK;
@@ -1039,7 +1024,7 @@ int main(int argc, char **argv)
         }
     }
 
-#pragma omp parallel num_threads(threads / 2)
+#pragma omp parallel num_threads(threads)
     for (const auto record : reader)
     {
         // //std::cerr << "seq name: " << record.id << std::endl;
@@ -1068,7 +1053,6 @@ int main(int argc, char **argv)
         // //std::cerr << "protein 4: " << sixframed_xlated_proteins[3] << std::endl;
         // //std::cerr << "protein 5: " << sixframed_xlated_proteins[4] << std::endl;
         // //std::cerr << "protein 6: " << sixframed_xlated_proteins[5] << std::endl;
-#pragma omp parallel for num_threads(2)
         for (size_t ori = 0; ori < 2; ++ori)
         //for (size_t ori = 0; ori < 2; ++ori) //TODO
         {
@@ -1144,7 +1128,7 @@ int main(int argc, char **argv)
                     while (aahash.get_pos() != std::numeric_limits<size_t>::max())
                     {
                         //// std::cerr << "checkpoint 1" << std::endl;
-                        while (!explore_frame(mi_bf, aahash, miBf_IDs_snapshot, miBf_pos_snapshot, id_to_count, aahash2, aahash3) && aahash.get_pos() != std::numeric_limits<size_t>::max())
+                        while (!explore_frame(mi_bf, aahash, miBf_IDs_snapshot, miBf_pos_snapshot, id_to_count) && aahash.get_pos() != std::numeric_limits<size_t>::max())
                         {
                             // //std::cerr << "explore_frame returned false" << std::endl;
                             aahash.roll();
@@ -1450,9 +1434,9 @@ int main(int argc, char **argv)
                                         //std::cerr << "attempting to gap fill1" << std::endl;
                                         //std::cerr << "mibf_id: " << miBf_ID << std::endl;
                                         if (start_end_pos_vec.size() > 1) {
-                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, threads);
+                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
                                         }
-                                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
+                                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID);
                                         //std::cerr << "done gap fill" << std::endl;
                                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                                             complete_copies++;
@@ -1508,7 +1492,7 @@ int main(int argc, char **argv)
                         //std::cerr << "attempting to gap fill2" << std::endl;
                         //std::cerr << "adjusted_kmer_counts: " << adjusted_kmer_counts << std::endl;
                         if (start_end_pos_vec.size() > 1) {
-                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, threads);
+                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
                         }
                         //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
                         //std::cerr << "done fill2" << std::endl;
