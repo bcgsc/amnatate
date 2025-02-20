@@ -142,28 +142,6 @@ void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set
                 id_to_pos_set[ID].insert(*temp_pos_set.begin());
             }
         }
-
-
-        // make a set from id
-        // insert the smallest pos of the new_temp_pos_set into id_to_pos_set
-
-
-        // check if the pos set in id_to_pos_set are all the same size
-        /*
-        size_t temp_size = 0;
-        for (auto &ID_pos_set : id_to_pos_set)
-        {
-            if (temp_size == 0)
-            {
-                temp_size = ID_pos_set.second.size();
-            }
-            else if (temp_size != ID_pos_set.second.size())
-            {
-                extend_block = false;
-                break;
-            }
-        }
-        */
     }
     else
     {
@@ -277,16 +255,11 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     {
         return std::get<0>(a) < std::get<0>(b);
     });
-    // std::cerr << "checkpoint a" << std::endl;
+
 
     // make a new vector and find all the gaps between the start and end pos that are larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_vec;
-    //output size of start_end_pos_vec
-    //std::cerr << "size of start_end_pos_vec: " << start_end_pos_vec.size() << std::endl;
-    /*for (const auto& tuple : start_end_pos_vec) {
-        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
-    }
-    std::cout << std::endl;*/
+
     for (size_t i = 0; i < start_end_pos_vec.size() - 1; ++i)
     {
         if (std::get<0>(start_end_pos_vec[i + 1]) - std::get<1>(start_end_pos_vec[i]) > kmer_size)
@@ -298,19 +271,8 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
         return;
     }
 
-    // std::cerr << "checkpoint b" << std::endl;
-    /*for (const auto& tuple : gap_vec) {
-        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
-    }
-    std::cout << std::endl;*/
-
     // make a new vector and find all the gaps between the start and end pos in tar that are larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_in_tar_space_vec;
-    //output size of start_end_pos_in_tar_space_vec
-    //std::cerr << "size of start_end_pos_in_tar_space_vec: " << start_end_pos_in_tar_space_vec.size() << std::endl;
-    /*for (const auto& tuple : start_end_pos_in_tar_space_vec) {
-        std::cout << "(" << std::get<0>(tuple) << ", " << std::get<1>(tuple) << ") ";
-    }*/
     for (size_t i = 0; i < start_end_pos_in_tar_space_vec.size() - 1; ++i)
     {
         if (std::get<0>(start_end_pos_in_tar_space_vec[i + 1]) - (std::get<1>(start_end_pos_in_tar_space_vec[i]) + 5 ) > kmer_size) //TODO
@@ -319,55 +281,30 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
         }
     }
 
-    // std::cerr << "checkpoint c" << std::endl;
 
     // make an unordered_set of all the pos in the gaps in start_end_pos_in_tar_space_vec
     std::unordered_set<size_t> gap_index_set;
     for (auto &gap : gap_in_tar_space_vec)
     {
-        //std::cerr << "gaps: " << std::endl;
         for (size_t i = std::get<0>(gap); i < std::get<1>(gap); ++i)
         {
             gap_index_set.insert(i);
-            //std::cerr << i << std::endl;
         }
     }
 
-    // std::cerr << "checkpoint d" << std::endl;
 
-    //std::cerr << "done gap index" << std::endl;
-
-
-    // make small mibf
-    //std::cerr << "seq to be inserted into small mibf: " << std::endl;
-    //std::cerr << seq << std::endl;
     if (gap_index_set.size() == 0)
     {
         return;
     }
-    // std::cerr << "checkpoint d.1" << std::endl;
-    // log all of the input to the mibf
-    //std::cerr << "seq size: " << seq.size() << std::endl;
-    //std::cerr << "hash_num: " << hash_num << std::endl;
-    //std::cerr << "rescue_kmer_size: " << rescue_kmer_size << std::endl;
-  //omp_set_num_threads(1);
-    //auto small_mi_bf = make_mibf(seq, hash_num, rescue_kmer_size);
     std::string small_mibf_path = std::to_string(miBf_ID) + ".mibf";
     btllib::MIBloomFilter<uint64_t> small_mi_bf(small_mibf_path);
-    // std::cerr << "checkpoint d.2" << std::endl;
-
-    //std::cerr << "done mibf" << std::endl;
-
     // iterate through gap_index_set and check if the pos is in the mibf
     // if it is, add the pos to the start_end_pos_vec
     size_t start_of_first_gap = std::get<0>(gap_vec[0]);
     size_t end_of_last_gap = std::get<1>(gap_vec[gap_vec.size() - 1]);
     std::vector<std::vector<uint32_t>> vec_of_vec_of_pos(3);
     std::vector<std::vector<size_t>> vec_of_vec_of_seq_pos(3);
-
-    // std::cerr << "checkpoint e" << std::endl;
-
-    //std::cerr << "pre frame" << std::endl;
 
     for (size_t frame = 0; frame < 3; ++frame)
     {
@@ -377,7 +314,6 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
         aahash.roll();
         aahash2.roll();
         aahash3.roll();
-        //bool prev_contains = false;
         while(aahash.get_pos() <= end_of_last_gap + 1)
         {
 
@@ -442,9 +378,6 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
         }
     }
 
-    // std::cerr << "checkpoint f" << std::endl;
-
-    //std::cerr << "post frame" << std::endl;
 
     for (size_t i = 0; i < 3; ++i) {
         if (vec_of_vec_of_pos[i].size() == 0) {
@@ -466,33 +399,7 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
         size_t length_of_block = vec_of_vec_of_pos[i].size() - 1 - start_of_block + 1;
         adjusted_kmer_counts += length_of_block + 3;
     }
-
-    // std::cerr << "checkpoint g" << std::endl;
-
-    //std::cerr << "post processing" << std::endl;
     return;
-
-    // print out vec_of_vec_of_pos with all the pos found
-    /*for (size_t frame = 0; frame < 3; ++frame)
-    {
-        std::cerr << "frame: " << frame << "\t";
-        for (auto &pos : vec_of_vec_of_pos[frame])
-        {
-            std::cerr << pos << "\t";
-        }
-        std::cerr << std::endl;
-    }*/
-
-
-
-    /*for (auto &pos : gap_index_set)
-    {
-        btllib::AAHash aahash(sixframed_xlated_proteins[0 + ori * 3], hash_num, rescue_kmer_size, 1, pos);
-        if (small_mi_bf.bv_contains(aahash.hashes()))
-        {
-            start_end_pos_vec.emplace_back(std::make_tuple(pos, pos + rescue_kmer_size));
-        }
-    }*/
 }
 
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
@@ -636,46 +543,6 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
                 }
             }
         }
-        /*std::set<uint32_t> temp_pos_set;
-        for (size_t i = 0; i < miBf_IDs_snapshot.size(); ++i)
-        {
-            for (size_t j = 0; j < miBf_IDs_snapshot[i].size(); ++j)
-            {
-                if (miBf_IDs_snapshot[i][j] == temp_mibf_ID)
-                {
-                    temp_pos_set.insert(miBf_pos_snapshot[i][j]);
-                }
-            }
-        }
-        // iterate through temp_pos_set and check if it is incrementing by 1
-        uint32_t prev_pos = 0;
-        size_t counter = 0;
-        for (auto &pos : temp_pos_set)
-        {
-            if (prev_pos == 0)
-            {
-                prev_pos = pos;
-                continue;
-            }
-            if (pos - prev_pos == 1)
-            {
-                ++counter;
-            }
-            else
-            {
-                counter = 0;
-            }
-            prev_pos = pos;
-        }
-        if (counter < 9)
-        {
-            return false;
-        }*/
-        /*////// std::cerr << "check pos before return true" << std::endl;
-        for (auto &pos : temp_pos_set)
-        {
-            //std::cerr << "pos: " << pos << std::endl;
-        }*/
     }
 
     return false;
@@ -855,9 +722,6 @@ int main(int argc, char **argv)
         genome_size += record.seq.size();
     }
 
-    //btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(std::max<size_t>(genome_size * 3, 1000000), hash_num, 0.1), hash_num);
-    // btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(1000000000, hash_num, 0.1), hash_num);
-
     if (verbose_flag)
     {
         std::cerr << "Creating seq_id to ID table" << std::endl;
@@ -881,9 +745,6 @@ int main(int argc, char **argv)
                 std::cerr << "seq name: " << record.id << std::endl;
                 exit(0);
             }
-            /*//std::cerr << "seq name: " << record.id << " miBf_ID: " << miBf_ID << std::endl;
-            //std::cerr << "seq size: " << record.seq.size() << std::endl;
-            //std::cerr << "seq: " << record.seq << std::endl; */
             ++miBf_ID;
         }
     }
@@ -897,56 +758,6 @@ int main(int argc, char **argv)
   
     auto sTime = omp_get_wtime();
     btllib::MIBloomFilter<uint64_t> mi_bf(mibf_path);
-    /*for (int stage = 0; stage < 3; stage++)
-    {
-        if (verbose_flag)
-        {
-            std::cerr << "stage:" << stage << std::endl;
-        }
-        btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
-#pragma omp parallel
-        for (const auto record : reader)
-        {
-
-            btllib::AAHash itr(record.seq, hash_num, kmer_size, 1);
-            btllib::AAHash itr2(record.seq, hash_num, kmer_size, 2);
-            btllib::AAHash itr3(record.seq, hash_num, kmer_size, 3);
-            auto &miBf_ID = seq_ID_to_miBf_ID[record.id];
-            
-
-            while (itr.roll() && itr2.roll() && itr3.roll())
-            //while (itr3.roll())
-            {
-                if (stage == 0)
-                {
-                    mi_bf.insert_bv(itr.hashes());
-                    mi_bf.insert_bv(itr2.hashes());
-                    mi_bf.insert_bv(itr3.hashes());
-                }
-                else if (stage == 1)
-                {
-                    uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
-                    mi_bf.insert_id(itr.hashes(), new_ID);
-                    mi_bf.insert_id(itr2.hashes(), new_ID);
-                    mi_bf.insert_id(itr3.hashes(), new_ID);
-                }
-                else
-                {
-                    uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
-                    mi_bf.insert_saturation(itr.hashes(), new_ID);
-                    mi_bf.insert_saturation(itr2.hashes(), new_ID);
-                    mi_bf.insert_saturation(itr3.hashes(), new_ID);
-                }
-            }
-        }
-        if (stage == 0)
-        {
-            mi_bf.complete_bv_insertion();
-        }
-    }
-    //std::cerr << "Pop sat cnt: " << mi_bf.get_pop_saturated_cnt() << std::endl;
-    //exit(0);
-    */
     std::cerr << "finished making MiBF" << std::endl;
     std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
               << "\n";
@@ -969,24 +780,6 @@ int main(int argc, char **argv)
     }
 
 
-    // make a gff set sorted by seq name and start pos
-    // the columns are seq name, start pos, end pos, score, strand,
-
-    // source, type missing because always the same, no attribute,phase
-
-    // compartor for gff set, sorted by seq name and start pos
-    
-    /*auto gff_comparator = [](const std::tuple<std::string, size_t, size_t, double, std::string, std::string> &a, const std::tuple<std::string, size_t, size_t, double, std::string, std::string> &b)
-    {
-        if (std::get<0>(a) == std::get<0>(b))
-        {
-            return std::get<1>(a) < std::get<1>(b);
-        }
-        return std::get<0>(a) < std::get<0>(b);
-    };
-
-    std::vector<std::set<std::tuple<std::string, size_t, size_t, double, std::string, std::string>, decltype(gff_comparator)>> gff_set_vector;*/
-
     // Create and insert three different instances of gff_set into the vector
     std::vector<std::set<gff_entry, gff_entry_comparator>> gff_set_vector;
     for (int i = 0; i < 3; ++i) {
@@ -1000,14 +793,11 @@ int main(int argc, char **argv)
     }
 
 
-    //auto& gff_set = gff_set_vector[0];
-
     btllib::SeqReader reader(input_file, btllib::SeqReader::Flag::LONG_MODE);
     if (verbose_flag)
     {
         std::cerr << "Reading input file: " << input_file << std::endl;
     }
-    // std::unordered_map<std::string, std::tuple<size_t, size_t, size_t, size_t>> seq_name_to_completeness;
     struct completeness_struct
     {
         size_t complete_copies = 0;
@@ -1027,32 +817,7 @@ int main(int argc, char **argv)
 #pragma omp parallel num_threads(threads)
     for (const auto record : reader)
     {
-        // //std::cerr << "seq name: " << record.id << std::endl;
         std::vector<std::string> sixframed_xlated_proteins = sixframe_translate(record.seq);
-        /*std::cerr << "length of original sequence: " << record.seq.size() << std::endl;
-        std::cerr << "length of protein 1: " << sixframed_xlated_proteins[0].size() << std::endl;
-        std::cerr << "length of protein 2: " << sixframed_xlated_proteins[1].size() << std::endl;
-        std::cerr << "length of protein 3: " << sixframed_xlated_proteins[2].size() << std::endl;
-*/
-        //create a protein fa file and write all proteins to it
-        /*std::ofstream protein_fa_file(output_prefix + record.id + ".fa");
-        protein_fa_file << ">" << record.id << "_1" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[0] << std::endl;
-        protein_fa_file << ">" << record.id << "_2" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[1] << std::endl;
-        protein_fa_file << ">" << record.id << "_3" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[2] << std::endl;
-        protein_fa_file << ">" << record.id << "_4" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[3] << std::endl;
-        protein_fa_file << ">" << record.id << "_5" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[4] << std::endl;
-        protein_fa_file << ">" << record.id << "_6" << std::endl;
-        protein_fa_file << sixframed_xlated_proteins[5] << std::endl;
-        protein_fa_file.close();*/
-
-        // //std::cerr << "protein 4: " << sixframed_xlated_proteins[3] << std::endl;
-        // //std::cerr << "protein 5: " << sixframed_xlated_proteins[4] << std::endl;
-        // //std::cerr << "protein 6: " << sixframed_xlated_proteins[5] << std::endl;
         for (size_t ori = 0; ori < 2; ++ori)
         //for (size_t ori = 0; ori < 2; ++ori) //TODO
         {
@@ -1060,15 +825,8 @@ int main(int argc, char **argv)
             std::vector<std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>>> frame_to_block_id_to_id_and_pos_vec(3);
             // id to count across all frames sorted by count largest to smallest
             std::vector<std::map<uint32_t, size_t, std::greater<size_t>>> id_to_count_across_all_frames_vec(3);
-            // custom comparator for set of pair of size_t and pair of size_t and size_t to sort by seq pos
-            /*auto custom_comparator = [](const std::tuple<size_t, size_t, size_t> &a, const std::tuple<size_t, size_t, size_t> &b)
-            {
-                return std::get<2>(a) < std::get<2>(b);
-            };*/
             // id to set of frame and block id and seq pos, set is sorted by seq pos
-            //std::vector<std::unordered_map<uint32_t, std::set<std::tuple<size_t, size_t, size_t>, CustomComparator>>> id_to_frame_block_id_and_seq_pos_vec(3);
             std::vector<std::unordered_map<uint32_t, std::set<frame_block, frame_block_comparator>>> id_to_frame_block_id_and_seq_pos_vec(3);
-            //for (size_t curr_lvl = 1; curr_lvl <= 3; ++curr_lvl) {
             for (size_t curr_lvl = 1; curr_lvl <= 1; ++curr_lvl) {
                 auto& frame_to_block_id_to_id_and_pos = frame_to_block_id_to_id_and_pos_vec[curr_lvl - 1];
                 auto& id_to_count_across_all_frames = id_to_count_across_all_frames_vec[curr_lvl - 1];
@@ -1077,41 +835,7 @@ int main(int argc, char **argv)
                 auto& pre_gff_set = pre_gff_set_vector[curr_lvl - 1];
                 auto& seq_name_to_completeness = seq_name_to_completeness_vec[curr_lvl - 1];
                 for (size_t frame = 0; frame < 3; ++frame)
-                //for (size_t frame = 0; frame < 1; ++frame)
                 {
-
-                    /*if (verbose_flag) {
-                        std::cerr << "frame: " << frame << " ori: " << ori << std::endl;
-                        btllib::AAHash aahash_test(sixframed_xlated_proteins[frame + ori * 3], hash_num, kmer_size, 1);
-                        btllib::AAHash aahash_test2(sixframed_xlated_proteins[frame + ori * 3], hash_num, kmer_size, 2);
-                        aahash_test.roll();
-                        aahash_test2.roll();
-                        for (size_t i = 0; i < 100; ++i) {
-                            if (mi_bf.bv_contains(aahash_test.hashes())) {
-                                std::cerr << "lvl 1" << std::endl;
-                                std::cerr << "bv contains" << i << " th hash" << std::endl;
-                                // get id and pos
-                                auto temp_ID_pos = mi_bf.get_id(aahash_test.hashes());
-                                for (auto &ID_pos : temp_ID_pos) {
-                                    std::cerr << "ID: " << (ID_pos >> 32) << " pos: " << (ID_pos & 0xFFFFFFFF) << std::endl;
-                                }
-                            }
-                            if (mi_bf.bv_contains(aahash_test2.hashes())) {
-                                std::cerr << "lvl 2" << std::endl;
-                                std::cerr << "bv contains" << i << " th hash" << std::endl;
-                                // get id and pos
-                                auto temp_ID_pos = mi_bf.get_id(aahash_test2.hashes());
-                                for (auto &ID_pos : temp_ID_pos) {
-                                    std::cerr << "ID: " << (ID_pos >> 32) << " pos: " << (ID_pos & 0xFFFFFFFF) << std::endl;
-                                }
-                            }
-                            aahash_test.roll();
-                            aahash_test2.roll();
-                        }
-
-                    }*/
-                    
-
                     btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, kmer_size, curr_lvl);
                     btllib::AAHash aahash2(sixframed_xlated_proteins[frame + ori * 3], hash_num, kmer_size, 2);
                     btllib::AAHash aahash3(sixframed_xlated_proteins[frame + ori * 3], hash_num, kmer_size, 3);
@@ -1127,20 +851,16 @@ int main(int argc, char **argv)
                     std::unordered_set<uint32_t> id_set;
                     while (aahash.get_pos() != std::numeric_limits<size_t>::max())
                     {
-                        //// std::cerr << "checkpoint 1" << std::endl;
                         while (!explore_frame(mi_bf, aahash, miBf_IDs_snapshot, miBf_pos_snapshot, id_to_count) && aahash.get_pos() != std::numeric_limits<size_t>::max())
                         {
-                            // //std::cerr << "explore_frame returned false" << std::endl;
                             aahash.roll();
                             aahash2.roll();
                             aahash3.roll();
                         }
-                        //// std::cerr << "checkpoint 2" << std::endl;
                         if (aahash.get_pos() == std::numeric_limits<size_t>::max())
                         {
                             break;
                         }
-                        //// std::cerr << "checkpoint 3" << std::endl;
                         size_t seq_pos = aahash.get_pos() - 4; //TODO
                         // find the largest count in id_to_count
                         size_t temp_max_count = 0;
@@ -1221,20 +941,16 @@ int main(int argc, char **argv)
 
                                 if (id_to_count_across_all_frames.find(ID_pos_set.first) == id_to_count_across_all_frames.end())
                                 {
-                                    //// std::cerr << "checkpoint x.8" << std::endl;
                                     id_to_count_across_all_frames[ID_pos_set.first] = ID_pos_set.second.size();
-                                    //// std::cerr << "checkpoint x.9" << std::endl;
                                 }
                                 else
                                 {
-                                    //// std::cerr << "checkpoint x.10" << std::endl;
                                     id_to_count_across_all_frames[ID_pos_set.first] += ID_pos_set.second.size();
-                                    //// std::cerr << "checkpoint x.11" << std::endl;
                                 }
                             }
                             ++block_id;
                         }
-                        //// std::cerr << "checkpoint y" << std::endl;
+
                         
 
                         // clear miBf_IDs_snapshot, miBf_pos_snapshot, and id_to_count
@@ -1275,7 +991,6 @@ int main(int argc, char **argv)
                 {
                     strand = "-";
                 }
-                //std::cerr << "finished processing frame " << curr_lvl << " " << ori << std::endl;
 
                 for (auto &ID_count : id_to_count_across_all_frames)
                 {
@@ -1285,21 +1000,18 @@ int main(int argc, char **argv)
                     {
                         continue;
                     }
-                    /*if (verbose_flag){
-                        std::cerr << "ID: " << ID_count.first << " count: " << ID_count.second << std::endl;
-                    }*/
                     
                     // iterate through id to frame block id and seq pos and log the completeness
                     std::string seq_name = miBf_ID_to_seq_ID_and_len[miBf_ID].first;
-                    /*if (verbose_flag) {
+                    if (verbose_flag) {
                         std::cerr << "calculating for protein name: " << seq_name << std::endl;
-                    }*/
+                    }
                     size_t complete_copies = 0;
                     size_t incomplete_copies = 0;
                     size_t expected_kmer_counts = miBf_ID_to_seq_ID_and_len[miBf_ID].second - kmer_size + 1;
-                    /*if (verbose_flag) {
+                    if (verbose_flag) {
                         std::cerr << "protein length: " << miBf_ID_to_seq_ID_and_len[miBf_ID].second << std::endl;
-                    }*/
+                    }
                     size_t adjusted_kmer_counts = 0;
                     size_t end_pos = 0;
                     size_t frame = 3;
@@ -1311,8 +1023,6 @@ int main(int argc, char **argv)
                     size_t prev_block_start = 0;
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_vec;
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_tar_vec;
-                    //std::cerr << "calculating for protein name: " << seq_name << std::endl;
-
                     
                     std::vector<std::reference_wrapper<const frame_block>> vec;
                     for (auto &frame_block_id_and_seq_pos : id_to_frame_block_id_and_seq_pos[miBf_ID])
@@ -1324,10 +1034,10 @@ int main(int argc, char **argv)
                         const frame_block &frame_block_id_and_seq_pos = vec[ref_idx].get();
 
                         if (verbose_flag) {
-                            //std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                            //std::cerr << "curr end_pos: " << end_pos << std::endl;
-                            //std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(frame_block_id_and_seq_pos)][std::get<1>(frame_block_id_and_seq_pos)].first << std::endl;
-                            //std::cerr << std::endl;
+                            /*std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
+                            std::cerr << "curr end_pos: " << end_pos << std::endl;
+                            std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(frame_block_id_and_seq_pos)][std::get<1>(frame_block_id_and_seq_pos)].first << std::endl;
+                            std::cerr << std::endl;*/
                         }
 
                         if (frame == 3) {
@@ -1338,7 +1048,6 @@ int main(int argc, char **argv)
                         }
 
                         size_t block_id = frame_block_id_and_seq_pos.block_id;
-                        // std::cerr << "checkpoint 1" << std::endl;
 
 
 
@@ -1351,17 +1060,12 @@ int main(int argc, char **argv)
                             prev_block_len = block_len;
                             block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
                             
-                            // std::cerr << "checkpoint 2" << std::endl;
+
 
                             if (start_end_pos_vec.empty()) {
                                 start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));\
-                                //std::cerr << "empty" << std::endl;
-                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
                                 start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                             }
-
-                            // std::cerr << "checkpoint 3" << std::endl;
 
                             if (end_pos == 0)
                             {
@@ -1371,18 +1075,12 @@ int main(int argc, char **argv)
                                     std::cerr << "start end_pos: " << end_pos << std::endl;
                                     std::cerr << std::endl;
                                 }
-                                
-                                
                                 adjusted_kmer_counts = block_len;
-                                // std::cerr << "checkpoint 3.1" << std::endl;
                             }
                             else
                             {
                                 if (end_pos < frame_to_block_id_to_id_and_pos[frame][block_id].first)
                                 {
-                                //std::cerr << "nonempty" << std::endl;
-                                //std::cerr << "start end pos vec start: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
-                                //std::cerr << "start end pos vec end: " << std::get<2>(frame_block_id_and_seq_pos) + block_len - 1 << std::endl;
                                     start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
                                     start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
@@ -1397,7 +1095,6 @@ int main(int argc, char **argv)
                                         std::cerr << "update end_pos: " << end_pos << std::endl;
                                         std::cerr << std::endl;
                                     }
-                                    // std::cerr << "checkpoint 3.2.1" << std::endl;
 
                                     // look ahead code
                                     if (ref_idx + 2 < vec.size()) {
@@ -1423,30 +1120,18 @@ int main(int argc, char **argv)
                                     seq_end_in_nucleotide = (prev_block_start + prev_block_len + kmer_size - 1)* 3 + frame;
                                     // log completeness and reset
                                     double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    // std::cerr << "checkpoint 3.2.2.1" << std::endl;
-
                                     if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
-                                        /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
-                                        {
-                                            complete_copies++;
-                                        }*/
-                                        //std::cerr << "attempting to gap fill1" << std::endl;
-                                        //std::cerr << "mibf_id: " << miBf_ID << std::endl;
                                         if (start_end_pos_vec.size() > 1) {
                                             fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
                                         }
-                                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID);
-                                        //std::cerr << "done gap fill" << std::endl;
                                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                                             complete_copies++;
                                         } else {
                                             incomplete_copies++;
                                         }
                                     }
-                                    // std::cerr << "checkpoint 3.2.2.2" << std::endl;
                                     double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                                    //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
                                         if (strand == "-") {
                                             auto temp = seq_start_in_nucleotide;
@@ -1459,51 +1144,32 @@ int main(int argc, char **argv)
                                             gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name);
 }
                                     }
-                                    // std::cerr << "checkpoint 3.2.2.3" << std::endl;
                                     
                                     end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
                                     adjusted_kmer_counts = block_len;
                                     seq_start_in_nucleotide = frame_block_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
-                                    // clear start_end_pos_vec and start_end_pos_tar_vec
                                     start_end_pos_vec.clear();
                                     start_end_pos_tar_vec.clear();
                                     start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
                                     start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
-                                    //frame = 3; //bug fix problem with seq_start in nucleotide, 1 block off
-                                    // std::cerr << "checkpoint 3.2.2.4" << std::endl;
                                     if (verbose_flag){
                                         std::cerr << "new end_pos: " << end_pos << std::endl;
                                     }
                                 }
                             }
-                            // block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
                         }
                     }
                     double prev_score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
-                    // std::cerr << "checkpoint 4" << std::endl;
-                    /*if (adjusted_kmer_counts >= 0.95 * expected_kmer_counts)
+                     if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
-                        complete_copies++;
-                    }
-                    else*/ if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
-                    {
-
-
-                        //std::cerr << "attempting to gap fill2" << std::endl;
-                        //std::cerr << "adjusted_kmer_counts: " << adjusted_kmer_counts << std::endl;
                         if (start_end_pos_vec.size() > 1) {
                             fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
                         }
-                        //fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, miBf_ID_to_seq[miBf_ID], hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size);
-                        //std::cerr << "done fill2" << std::endl;
-                        //std::cerr << "adjusted_kmer_counts: " << adjusted_kmer_counts << std::endl;
                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                             complete_copies++;
                         } else {
                             incomplete_copies++;
                         }
-
-                        // std::cerr << "checkpoint 4.1" << std::endl;
                     }
                     // log completeness
 #pragma omp atomic
@@ -1511,8 +1177,6 @@ int main(int argc, char **argv)
 
 #pragma omp atomic
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
-
-                    //if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
 
                         const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
@@ -1531,16 +1195,11 @@ int main(int argc, char **argv)
                             pre_gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, prev_score, strand, seq_name);
                             gff_set.emplace(record.id, seq_start_in_nucleotide, seq_end_in_nucleotide, score, strand, seq_name);
                         }
-                        // std::cerr << "checkpoint 4.2" << std::endl;
                     }
                 }
-                // //std::cerr << "done with ori" << std::endl;
             }
         }
     }
-
-    // //std::cerr << "done processing" << std::endl;
-
     // output the completeness to the output file
     for (int i = 0; i < 3; ++i) {
         auto& seq_name_to_completeness = seq_name_to_completeness_vec[i];
@@ -1577,25 +1236,6 @@ int main(int argc, char **argv)
                         << "ID=" << gff.hit_name << std::endl;
         }
     }
-
-    /*for (auto &seq_name_completeness : seq_name_to_completeness)
-    {
-        // output_file << seq_name_completeness.first << "\t" << std::get<0>(seq_name_completeness.second) << "\t" << std::get<1>(seq_name_completeness.second) << "\t" << std::get<2>(seq_name_completeness.second) << "\t" << std::get<3>(seq_name_completeness.second) << std::endl;
-        output_file << seq_name_completeness.first << "\t" << seq_name_completeness.second.complete_copies << "\t" << seq_name_completeness.second.incomplete_copies << "\t" << seq_name_completeness.second.expected_kmer_counts << "\t" << seq_name_completeness.second.highest_adjusted_kmer_counts << std::endl;
-    }*/
-
-    /*for (auto &gff : gff_set)
-    {
-        gff_output_file << std::get<0>(gff) << "\t"
-                        << "."
-                        << "\t"
-                        << "gene"
-                        << "\t" << std::get<1>(gff) << "\t" << std::get<2>(gff) << "\t" << std::get<3>(gff) << "\t" << std::get<4>(gff) << "\t"
-                        << "0"
-                        << "\t"
-                        << "ID=" << std::get<5>(gff) << std::endl;
-    }*/
-
 
     return 0;
 }
