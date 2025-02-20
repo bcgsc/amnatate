@@ -1,5 +1,5 @@
-project('goldstandard', 'cpp',
-        version : '0.0.1',
+project('aakomp', 'cpp',
+        version : '1.0.0',
         license : 'GPL-3',
         default_options : [ 'cpp_std=c++17', 'warning_level=3', 'werror=true'])
 
@@ -18,15 +18,17 @@ btllib_dep =  compiler.find_library('btllib')
 
 rootpath = meson.source_root()
 
-gs_src_files = [ 'goldstandard.cpp' ]
+aakomp_src_files = [ 'aakomp.cpp' ]
 make_mibf_src_files = [ 'make_mibf.cpp' ]
+inc_dirs = [ 'argparse' ]
 deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep ]
 link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz' ]
 
-executable('goldstandard',
-    gs_src_files,
+executable('aakomp',
+    aakomp_src_files,
     dependencies : deps,
     link_args : link_args,
+    include_directories : inc_dirs,
     install : true
 )
 
@@ -34,5 +36,6 @@ executable('make_mibf',
     make_mibf_src_files,
     dependencies : deps,
     link_args : link_args,
+    include_directories : inc_dirs,
     install : true
 )

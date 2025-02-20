@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
@@ -11,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <argparse/argparse.hpp>
 #include <btllib/aahash.hpp>
 #include <btllib/seq.hpp>
 #include <btllib/seq_reader.hpp>
@@ -247,7 +249,7 @@ btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t h
 
 }
 
-void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori, size_t kmer_size, size_t level, uint32_t miBf_ID)
+void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec, size_t& adjusted_kmer_counts, size_t hash_num, size_t rescue_kmer_size, const std::vector<std::string>& sixframed_xlated_proteins, size_t ori, size_t kmer_size, size_t level, uint32_t miBf_ID, const std::string& db_path)
 {
 
     //sort start_end_pos_vec by start_pos
@@ -297,7 +299,7 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec, st
     {
         return;
     }
-    std::string small_mibf_path = std::to_string(miBf_ID) + ".mibf";
+    std::string small_mibf_path = db_path + "/" + std::to_string(miBf_ID) + ".mibf";
     btllib::MIBloomFilter<uint64_t> small_mi_bf(small_mibf_path);
     // iterate through gap_index_set and check if the pos is in the mibf
     // if it is, add the pos to the start_end_pos_vec
@@ -574,101 +576,99 @@ struct gff_entry_comparator {
 
 
 // main function that takes in command line arguments using getopt
-int main(int argc, char **argv)
-{
     // declare variables
-    int opt;
-    int option_index = 0;
-    int verbose_flag = 0;
-    int help_flag = 0;
-    size_t threads = 1;
-    std::string input_file = "";
-    std::string reference_path = "";
-    std::string output_prefix = "_";
-    uint8_t hash_num = 1;
-    uint8_t kmer_size = 10;
-    size_t rescue_kmer_size = 4;
-    uint64_t genome_size = 0;
-    double lower_bound = 0.8;
-    std::string mibf_path = "";
-    static struct option long_options[] = {
-        {"help", no_argument, &help_flag, 1},
-        {"verbose", no_argument, &verbose_flag, 1},
-        {"threads", required_argument, 0, 't'},
-        {"input", required_argument, 0, 'i'},
-        {"reference", required_argument, 0, 'r'},
-        {"mibf_path", required_argument, 0, 'm'},
-        {"output", required_argument, 0, 'o'},
-        {"hash", required_argument, 0, 'h'},
-        {"kmer", required_argument, 0, 'k'},
-        {"genome", required_argument, 0, 'g'},
-        {"lower_bound", required_argument, 0, 'l'},
-        {0, 0, 0, 0}};
+int main(int argc, char* argv[]) {
+    argparse::ArgumentParser program("aaKomp");
 
-    // loop through command line arguments
-    while ((opt = getopt_long(argc, argv, "g:h:i:t:o:r:k:m:l:", long_options, &option_index)) != -1)
-    {
-        switch (opt)
-        {
-        case 0:
-            if (long_options[option_index].flag != 0)
-            {
-                break;
-            }
-            std::cout << "option " << long_options[option_index].name;
-            if (optarg)
-            {
-                std::cout << " with arg " << optarg;
-            }
-            std::cout << std::endl;
-            break;
-        case 't':
-            threads = std::stoul(optarg);
-            break;
-        case 'i':
-            input_file = optarg;
-            break;
-        case 'r':
-            reference_path = optarg;
-            break;
-        case 'o':
-            output_prefix = optarg;
-            break;
-        case 'h':
-            hash_num = std::stoi(optarg);
-            break;
-        case 'k':
-            kmer_size = std::stoi(optarg);
-            break;
-        case 'm':
-            mibf_path = optarg;
-            break;
-        case 'g':
-            genome_size = std::stoul(optarg);
-            break;
-        case 'l':
-            lower_bound = std::stod(optarg);
-            break;
-        case '?':
-            break;
-        default:
-            std::cout << "Unknown option: " << opt << std::endl;
-            break;
-        }
+    program.add_argument("--help")
+        .help("Print this help message")
+        .default_value(false)
+        .implicit_value(true);
+
+    program.add_argument("-i", "--input")
+        .help("Input file name")
+        .required();
+    
+    program.add_argument("-o", "--output")
+        .help("Output prefix")
+        .default_value(std::string("_"));
+    
+    program.add_argument("-r", "--reference")
+        .help("Reference path")
+        .required();
+    
+    program.add_argument("-t", "--threads")
+        .help("Number of threads to use")
+        .default_value(size_t(1))
+        .scan<'u', size_t>();
+    
+    program.add_argument("-v", "--verbose")
+        .help("Verbose output")
+        .default_value(false)
+        .implicit_value(true);
+    
+    program.add_argument("-m", "--mibf_path")
+        .help("MIBF file path")
+        .default_value(std::string(""));
+    
+    program.add_argument("-h", "--hash")
+        .help("Number of hash functions")
+        .default_value(uint8_t(1))
+        .scan<'u', uint8_t>();
+    
+    program.add_argument("-k", "--kmer")
+        .help("K-mer size")
+        .default_value(uint8_t(10))
+        .scan<'u', uint8_t>();
+    
+    program.add_argument("-g", "--genome")
+        .help("Genome size")
+        .default_value(uint64_t(0))
+        .scan<'u', uint64_t>();
+    
+    program.add_argument("-l", "--lower_bound")
+        .help("Lower bound value")
+        .default_value(0.8)
+        .scan<'g', double>();
+
+    program.add_argument("-rks", "--rescue_kmer")
+        .help("Rescue k-mer size")
+        .default_value(size_t(4))
+        .scan<'u', size_t>();
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return 1;
     }
 
-    // print help message with required arguments
-    if (help_flag)
-    {
-        std::cerr << "Usage: " << argv[0] << " [options]" << std::endl;
-        std::cerr << "Options:" << std::endl;
-        std::cerr << "  -h, --help\t\t\tPrint this help message" << std::endl;
-        std::cerr << "  -i, --input\t\t\tInput file name" << std::endl;
-        std::cerr << "  -o, --output\t\t\tOutput prefix" << std::endl;
-        std::cerr << "  -r, --reference\t\tReference path" << std::endl;
-        std::cerr << "  -t, --threads\t\t\tNumber of threads to use (default: 1)" << std::endl;
-        std::cerr << "  -v, --verbose\t\t\tVerbose output" << std::endl;
-        exit(0);
+    // Extract values
+    bool help_flag = program.get<bool>("--help");
+    bool verbose_flag = program.get<bool>("--verbose");
+    size_t threads = program.get<size_t>("--threads");
+    std::string input_file = program.get<std::string>("--input");
+    std::string reference_path = program.get<std::string>("--reference");
+    std::string output_prefix = program.get<std::string>("--output");
+    std::string mibf_path = program.get<std::string>("--mibf_path");
+    uint8_t hash_num = program.get<uint8_t>("--hash");
+    uint8_t kmer_size = program.get<uint8_t>("--kmer");
+    size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
+    uint64_t genome_size = program.get<uint64_t>("--genome");
+    double lower_bound = program.get<double>("--lower_bound");
+
+    std::string db_path_loc = "./";
+    if (!mibf_path.empty()) {
+        std::filesystem::path path_obj(mibf_path);
+        if (path_obj.has_parent_path()) {
+            db_path_loc = path_obj.parent_path().string();
+        }
+    }
+    
+    if (help_flag) {
+        std::cerr << program << std::endl;
+        return 0;
     }
 
     // print error message if input file is not provided
@@ -692,20 +692,37 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // print log of current parameters if verbose flag is set
-    if (verbose_flag)
-    {
+    // Print error messages if required arguments are missing
+    if (input_file.empty()) {
+        std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
+        return 1;
+    }
+
+    if (reference_path.empty()) {
+        std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
+        return 1;
+    }
+
+    if (threads == 0) {
+        std::cerr << "Threads must be greater than 0. Use -h or --help for more information." << std::endl;
+        return 1;
+    }
+    
+    // Print parsed arguments
+    if (verbose_flag) {
         std::cerr << "Input file: " << input_file << "\n"
                   << "Output prefix: " << output_prefix << "\n"
                   << "Reference path: " << reference_path << "\n"
                   << "Threads: " << threads << "\n"
                   << "Hash number: " << (uint64_t)hash_num << "\n"
                   << "Kmer size: " << (uint64_t)kmer_size << "\n"
-                  << "Rescue kmer size: " << (uint64_t)rescue_kmer_size << "\n"
+                  << "Rescue kmer size: " << rescue_kmer_size << "\n"
                   << "Genome size: " << genome_size << "\n"
-                  << "Lower bound: " << lower_bound << "\n" 
+                  << "Lower bound: " << lower_bound << "\n"
+                  << "DB Path Location: " << db_path_loc << "\n"
                   << std::endl;
     }
+
 
     omp_set_num_threads(threads);
 
@@ -1123,7 +1140,7 @@ int main(int argc, char **argv)
                                     if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
                                         if (start_end_pos_vec.size() > 1) {
-                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
+                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID, db_path_loc);
                                         }
                                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                                             complete_copies++;
@@ -1163,7 +1180,7 @@ int main(int argc, char **argv)
                      if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
                         if (start_end_pos_vec.size() > 1) {
-                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID);
+                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, curr_lvl, miBf_ID, db_path_loc);
                         }
                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                             complete_copies++;
