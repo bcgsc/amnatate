@@ -66,7 +66,7 @@ size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &
         }
     }
 
-    return offset;
+    return 0;
 }
 
 void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set, 
@@ -636,6 +636,11 @@ int main(int argc, char* argv[]) {
         .default_value(size_t(4))
         .scan<'u', size_t>();
 
+    program.add_argument("-mo", "--max_offset")
+        .help("Maximum offset")
+        .default_value(size_t(2))
+        .scan<'u', size_t>();
+
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception& err) {
@@ -657,6 +662,7 @@ int main(int argc, char* argv[]) {
     size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
     uint64_t genome_size = program.get<uint64_t>("--genome");
     double lower_bound = program.get<double>("--lower_bound");
+    size_t max_offset = program.get<size_t>("--max_offset");
 
     std::string db_path_loc = "./";
     if (!mibf_path.empty()) {
@@ -720,6 +726,7 @@ int main(int argc, char* argv[]) {
                   << "Genome size: " << genome_size << "\n"
                   << "Lower bound: " << lower_bound << "\n"
                   << "DB Path Location: " << db_path_loc << "\n"
+                  << "Max offset: " << max_offset << "\n"
                   << std::endl;
     }
 
@@ -1115,7 +1122,11 @@ int main(int argc, char* argv[]) {
 
                                     // look ahead code
                                     if (ref_idx + 2 < vec.size()) {
-                                        const frame_block &next_frame_block_id_and_seq_pos = vec[ref_idx + 1].get();
+                                        size_t idx_offset = look_ahead(vec, ref_idx, end_pos, frame_to_block_id_to_id_and_pos, max_offset);
+                                        if (idx_offset > 0) {
+                                            ref_idx += idx_offset;
+                                        }
+                                        /*const frame_block &next_frame_block_id_and_seq_pos = vec[ref_idx + 1].get();
                                         auto next_block_id = next_frame_block_id_and_seq_pos.block_id;
                                         auto next_frame = next_frame_block_id_and_seq_pos.frame;
                                         const frame_block &next_next_frame_block_id_and_seq_pos = vec[ref_idx + 2].get();
@@ -1129,7 +1140,7 @@ int main(int argc, char* argv[]) {
                                             } else {
                                                 continue;
                                             }
-                                        }
+                                        }*/
                                     }
                                 }
                                 else
