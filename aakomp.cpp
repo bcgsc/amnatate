@@ -35,38 +35,68 @@ struct frame_block_comparator {
     }
 };
 
-size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
-                 const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
-
+size_t look_ahead(
+    const std::vector<std::reference_wrapper<const frame_block>> &vec, 
+    size_t ref_idx, size_t end_pos, 
+    const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, 
+    size_t offset) 
+{
     if (ref_idx + 1 >= vec.size()) {
         return 0;
     }
 
-    // Special logic for the first position check
-    const frame_block &next_frame_block = vec[ref_idx + 1].get();
-    auto next_block_id = next_frame_block.block_id;
-    auto next_frame = next_frame_block.frame;
-
-    if (end_pos < frame_to_block_id_to_id_and_pos.at(next_frame).at(next_block_id).first) {
-        return 0;
-    }
-
-    // General logic for subsequent positions
-    for (size_t i = 2; i <= offset; ++i) {
-        if (ref_idx + i >= vec.size()) {
-            return 0;
-        }
-
+    // Retrieve up to `offset` blocks and their (start, end) positions
+    std::vector<std::pair<uint32_t, uint32_t>> positions;
+    for (size_t i = 1; i <= offset && ref_idx + i < vec.size(); ++i) {
         const frame_block &frame_block_i = vec[ref_idx + i].get();
         auto block_id = frame_block_i.block_id;
         auto frame = frame_block_i.frame;
 
-        if (end_pos < frame_to_block_id_to_id_and_pos.at(frame).at(block_id).first) {
-            return i - 1;
+        positions.push_back(frame_to_block_id_to_id_and_pos.at(frame).at(block_id));
+    }
+
+    // Iterate through all individual blocks
+    std::vector<size_t> viable_indices;
+    std::vector<int64_t> diffs;
+    for (size_t i = 0; i < positions.size(); ++i) {
+
+        // Calculate the difference between the end position of the current block and the start position of the next block
+        int64_t diff = static_cast<int64_t>(positions[i].first) - static_cast<int64_t>(end_pos);
+
+        // If the difference is less than the best difference, update the best difference and the best block index
+        if (diff > 0) {
+            viable_indices.push_back(i);
+            diffs.push_back(diff);
         }
     }
 
-    return 0;
+    if (viable_indices.size() == 0) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < viable_indices.size(); ++i) {
+        size_t idx = viable_indices[i];
+        for (int j = idx - 1; j  >= 0; --j) {
+            if (j == -1) {
+                break;
+            }
+            if ( static_cast<int64_t>(positions[idx].first) -  static_cast<int64_t>(positions[j].second) < diffs[i] && static_cast<int64_t>(positions[idx].first) -  static_cast<int64_t>(positions[j].second) > 0) {
+                viable_indices[i] = std::numeric_limits<size_t>::max();
+                diffs[i] = std::numeric_limits<int64_t>::max();
+            }
+        }
+    }
+
+    int64_t min_diff = std::numeric_limits<int64_t>::max();
+    size_t min_diff_idx = 0;
+    for (size_t i = 0; i < viable_indices.size(); ++i) {
+        if (diffs[i] < min_diff) {
+            min_diff = diffs[i];
+            min_diff_idx = viable_indices[i];
+        }
+    }
+
+    return min_diff_idx;
 }
 
 void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set, 
@@ -606,6 +636,11 @@ int main(int argc, char* argv[]) {
         .help("Verbose output")
         .default_value(false)
         .implicit_value(true);
+
+    program.add_argument("--debug")
+        .help("Debug output")
+        .default_value(false)
+        .implicit_value(true);
     
     program.add_argument("-m", "--mibf_path")
         .help("MIBF file path")
@@ -652,6 +687,7 @@ int main(int argc, char* argv[]) {
     // Extract values
     bool help_flag = program.get<bool>("--help");
     bool verbose_flag = program.get<bool>("--verbose");
+    bool debug_flag = program.get<bool>("--debug");
     size_t threads = program.get<size_t>("--threads");
     std::string input_file = program.get<std::string>("--input");
     std::string reference_path = program.get<std::string>("--reference");
@@ -728,6 +764,10 @@ int main(int argc, char* argv[]) {
                   << "DB Path Location: " << db_path_loc << "\n"
                   << "Max offset: " << max_offset << "\n"
                   << std::endl;
+    }
+
+    if (debug_flag) {
+        std::cerr << "Debug mode enabled" << std::endl;
     }
 
 
@@ -1126,21 +1166,6 @@ int main(int argc, char* argv[]) {
                                         if (idx_offset > 0) {
                                             ref_idx += idx_offset;
                                         }
-                                        /*const frame_block &next_frame_block_id_and_seq_pos = vec[ref_idx + 1].get();
-                                        auto next_block_id = next_frame_block_id_and_seq_pos.block_id;
-                                        auto next_frame = next_frame_block_id_and_seq_pos.frame;
-                                        const frame_block &next_next_frame_block_id_and_seq_pos = vec[ref_idx + 2].get();
-                                        auto next_next_block_id = next_next_frame_block_id_and_seq_pos.block_id;
-                                        auto next_next_frame = next_next_frame_block_id_and_seq_pos.frame;
-                                        if (end_pos < frame_to_block_id_to_id_and_pos[next_frame][next_block_id].first) {
-                                            continue;
-                                        } else {
-                                            if (end_pos < frame_to_block_id_to_id_and_pos[next_next_frame][next_next_block_id].first) {
-                                                ref_idx += 1;
-                                            } else {
-                                                continue;
-                                            }
-                                        }*/
                                     }
                                 }
                                 else

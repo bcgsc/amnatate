@@ -24,6 +24,55 @@ size_t calc_optimal_size(size_t entries, unsigned hash_num, double occupancy)
     return non64ApproxVal + (64 - non64ApproxVal % 64);
 }
 
+btllib::MIBloomFilter<uint64_t> make_small_mibf(const std::string& seq, const size_t hash_num, const size_t kmer_size) 
+{
+    size_t filter_size = seq.size() * 3;
+    if (filter_size < 100000) {
+        filter_size = 100000;
+    }
+    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(filter_size, 1, 0.1), 1);
+    for (int stage = 0; stage < 3; stage++)
+    {
+
+        btllib::AAHash itr(seq, hash_num, kmer_size, 1);
+        btllib::AAHash itr2(seq, hash_num, kmer_size, 2);
+        btllib::AAHash itr3(seq, hash_num, kmer_size, 3);
+        size_t miBf_ID = 1;
+        
+
+        while (itr.roll() && itr2.roll() && itr3.roll())
+        {
+            if (stage == 0)
+            {
+                mi_bf.insert_bv(itr.hashes());
+                mi_bf.insert_bv(itr2.hashes());
+                mi_bf.insert_bv(itr3.hashes());
+            }
+            else if (stage == 1)
+            {
+                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
+                mi_bf.insert_id(itr.hashes(), new_ID);
+                mi_bf.insert_id(itr2.hashes(), new_ID);
+                mi_bf.insert_id(itr3.hashes(), new_ID);
+            }
+            else
+            {
+                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
+                mi_bf.insert_saturation(itr.hashes(), new_ID);
+                mi_bf.insert_saturation(itr2.hashes(), new_ID);
+                mi_bf.insert_saturation(itr3.hashes(), new_ID);
+            }
+        }
+        
+        if (stage == 0)
+        {
+            mi_bf.complete_bv_insertion();
+        }
+    }
+    return mi_bf;
+
+}
+
 // main function that takes in command line arguments using getopt
 int main(int argc, char **argv)
 {
@@ -146,6 +195,8 @@ int main(int argc, char **argv)
 
     omp_set_num_threads(threads);
 
+    std::unordered_map<std::string, uint32_t> seq_ID_to_miBf_ID;
+
 
     if (verbose_flag)
     {
@@ -153,6 +204,7 @@ int main(int argc, char **argv)
     }
 
     // read through reference file which is a fasta file and count the number of characters in the sequences and assign it genome_size
+    {
     btllib::SeqReader ref_reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
     for (const auto record : ref_reader)
     {
@@ -167,7 +219,7 @@ int main(int argc, char **argv)
         std::cerr << "Creating seq_id to ID table" << std::endl;
     }
 
-    std::unordered_map<std::string, uint32_t> seq_ID_to_miBf_ID;
+    
     std::unordered_map<uint32_t, std::pair<std::string, size_t>> miBf_ID_to_seq_ID_and_len;
     std::unordered_map<uint32_t, std::string> miBf_ID_to_seq;
     {
@@ -242,5 +294,27 @@ int main(int argc, char **argv)
     std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
               << "\n";
 
-    mi_bf.save(output_prefix + "_miBF");
+    mi_bf.save(output_prefix + ".mibf");
+    }
+
+    {
+    btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
+#pragma omp parallel
+        for (const auto record : reader)
+        {
+
+            auto mi_bf = make_small_mibf(record.seq, hash_num, kmer_size);
+            auto &miBf_ID = seq_ID_to_miBf_ID[record.id];
+            
+
+            mi_bf.save(std::to_string(miBf_ID) + ".mibf");
+        }
+
+    
+    std::cerr << "finished making small MiBF" << std::endl;
+
+
+
+    
+    }
 }
