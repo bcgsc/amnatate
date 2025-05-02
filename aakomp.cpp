@@ -20,6 +20,9 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
+static constexpr uint32_t HASH_ID_SHIFT = 32;
+static constexpr uint32_t HASH_POS_MASK = 0xFFFFFFFF;
+
 struct FrameBlock {
     size_t frame;
     size_t block_id;
@@ -94,105 +97,85 @@ size_t look_ahead(
 }
 
 
-void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set,
-                    std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block,
-                    std::vector<uint32_t>& ids_vec, std::vector<uint32_t>& temp_pos_vec, const btllib::MIBloomFilter<uint64_t>& mi_bf)
+void process_hashes(
+    const std::vector<uint64_t>& temp_ID_pos,
+    std::unordered_set<uint32_t>& id_set,
+    std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set,
+    bool& extend_block,
+    std::vector<uint32_t>& ids_vec,
+    std::vector<uint32_t>& temp_pos_vec,
+    const btllib::MIBloomFilter<uint64_t>& mi_bf)
 {
     bool found = false;
 
-    for (auto &ID : id_set)
-    {
-        for (auto &ID_pos : temp_ID_pos)
-        {
-            auto demasked_ID_pos = ID_pos & mi_bf.ANTI_MASK;
-            if (ID == (demasked_ID_pos >> 32))
-            {
+    for (const auto& id : id_set) {
+        for (const auto& id_pos : temp_ID_pos) {
+            auto demasked = id_pos & mi_bf.ANTI_MASK;
+            if (id == (demasked >> HASH_ID_SHIFT)) {
                 found = true;
                 break;
             }
         }
-        if (found)
-        {
-            break;
-        }
+        if (found) break;
     }
 
-    if (found)
-    {
-        for (auto &ID_pos : temp_ID_pos)
-        {
-            auto demasked_ID_pos = ID_pos & mi_bf.ANTI_MASK;
-            ids_vec.push_back(demasked_ID_pos >> 32);
-            temp_pos_vec.push_back(demasked_ID_pos & 0xFFFFFFFF);
+    if (found) {
+        for (const auto& id_pos : temp_ID_pos) {
+            auto demasked = id_pos & mi_bf.ANTI_MASK;
+            ids_vec.push_back(demasked >> HASH_ID_SHIFT);
+            temp_pos_vec.push_back(demasked & HASH_POS_MASK);
         }
-        std::vector<uint32_t> new_pos;
+
+        size_t expected_size = ids_vec.size();
         std::vector<uint32_t> new_ids;
+        std::vector<uint32_t> new_pos;
+        new_ids.reserve(expected_size);
+        new_pos.reserve(expected_size);
 
-        for (size_t i = 0; i < ids_vec.size(); ++i)
-        {
-            // check if ID is in id_set
-            std::set<uint32_t> temp_pos_set;
-            
-            if (id_set.find(ids_vec[i]) != id_set.end())
-            {
-                temp_pos_set.insert(temp_pos_vec[i]);
-            } else {                
-                new_ids.push_back(ids_vec[i]);
-                new_pos.push_back(temp_pos_vec[i]);
-            }
-            for (auto &pos : temp_pos_set)
-            {
-                if (id_to_pos_set[ids_vec[i]].size() != 0 && pos == *id_to_pos_set[ids_vec[i]].rbegin() + 1)
-                {
-                    id_to_pos_set[ids_vec[i]].insert(pos);
-                    break;
+        for (size_t i = 0; i < expected_size; ++i) {
+            uint32_t id = ids_vec[i];
+            uint32_t pos = temp_pos_vec[i];
+
+            if (id_set.count(id)) {
+                const auto& pos_set = id_to_pos_set[id];
+                if (!pos_set.empty() && pos == *pos_set.rbegin() + 1) {
+                    id_to_pos_set[id].insert(pos);
                 }
+            } else {
+                new_ids.push_back(id);
+                new_pos.push_back(pos);
             }
-
         }
 
-        // make a set from new_ids
-        // insert the smallest pos of the new_pos associated with id from new_ids into id_to_pos_set
-        std::unordered_set<uint32_t> new_id_set(new_ids.begin(), new_ids.end()); // TODO IMPROVE
-        for (auto &ID : new_id_set)
-        {
-            std::set<uint32_t> temp_pos_set;
-            for (size_t i = 0; i < new_ids.size(); ++i)
-            {
-                if (new_ids[i] == ID)
-                {
-                    temp_pos_set.insert(new_pos[i]);
+        std::unordered_set<uint32_t> new_id_set(new_ids.begin(), new_ids.end());
+        for (const auto& id : new_id_set) {
+            std::set<uint32_t> pos_set;
+            for (size_t i = 0; i < new_ids.size(); ++i) {
+                if (new_ids[i] == id) {
+                    pos_set.insert(new_pos[i]);
                 }
             }
-            if (temp_pos_set.size() != 0)
-            {
-                id_to_pos_set[ID].insert(*temp_pos_set.begin());
+            if (!pos_set.empty()) {
+                id_to_pos_set[id].insert(*pos_set.begin());
             }
         }
-    }
-    else
-    {
+
+    } else {
         bool saturated = true;
-        for (auto &ID_pos : temp_ID_pos)
-        {
-            if (ID_pos < mi_bf.MASK)
-            {
+        for (const auto& id_pos : temp_ID_pos) {
+            if (id_pos < mi_bf.MASK) {
                 saturated = false;
                 break;
             }
         }
-        if (!saturated)
-        {
+
+        if (!saturated) {
             extend_block = false;
-        }
-        else
-        {
+        } else {
             extend_block = true;
-            for (auto& pos_set : id_to_pos_set) {
-                if (pos_set.second.size() == 0) {
-                    continue;
-                } else {
-                    pos_set.second.insert(*pos_set.second.rbegin() + 1);
+            for (auto& [id, pos_set] : id_to_pos_set) {
+                if (!pos_set.empty()) {
+                    pos_set.insert(*pos_set.rbegin() + 1);
                 }
             }
         }
