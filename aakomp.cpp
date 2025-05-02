@@ -22,6 +22,7 @@
 
 static constexpr uint32_t HASH_ID_SHIFT = 32;
 static constexpr uint32_t HASH_POS_MASK = 0xFFFFFFFF;
+static constexpr size_t FRAMES = 3;
 
 struct FrameBlock {
     size_t frame;
@@ -182,109 +183,108 @@ void process_hashes(
     }
 }
 
-std::vector<std::string> sixframe_translate(const std::string &dna)
+std::vector<std::string> sixframe_translate(const std::string& dna)
 {
     std::vector<std::string> protein;
-    std::string rev_dna = btllib::get_reverse_complement(dna);
-    protein.push_back(Sequence::Translate(dna.begin(), dna.end()));
-    protein.push_back(Sequence::Translate(dna.begin() + 1, dna.end()));
-    protein.push_back(Sequence::Translate(dna.begin() + 2, dna.end()));
-    protein.push_back(Sequence::Translate(rev_dna.begin(), rev_dna.end()));
-    protein.push_back(Sequence::Translate(rev_dna.begin() + 1, rev_dna.end()));
-    protein.push_back(Sequence::Translate(rev_dna.begin() + 2, rev_dna.end()));
+    protein.reserve(6);
+
+    const std::string rev_dna = btllib::get_reverse_complement(dna);
+
+    // Forward frames
+    for (size_t frame = 0; frame < FRAMES; ++frame) {
+        protein.push_back(Sequence::Translate(dna.begin() + frame, dna.end()));
+    }
+
+    // Reverse frames
+    for (size_t frame = 0; frame < FRAMES; ++frame) {
+        protein.push_back(Sequence::Translate(rev_dna.begin() + frame, rev_dna.end()));
+    }
+
     return protein;
 }
 
+void fill_in_gaps(
+    std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
+    std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec,
+    size_t& adjusted_kmer_counts,
+    size_t hash_num, size_t rescue_kmer_size,
+    const std::vector<std::string>& sixframed_xlated_proteins,
+    size_t ori, size_t kmer_size,
+    uint32_t miBf_ID, const std::string& db_path)
+{
+    const size_t MIN_KMER_CHAIN_GAP = rescue_kmer_size - 1;
+    const size_t TARGET_GAP_ADJUSTMENT = rescue_kmer_size + 1;
 
-void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
-                  std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec,
-                  size_t& adjusted_kmer_counts,
-                  size_t hash_num, size_t rescue_kmer_size,
-                  const std::vector<std::string>& sixframed_xlated_proteins,
-                  size_t ori, size_t kmer_size,
-                  uint32_t miBf_ID, const std::string& db_path) {
-
-    // Sort start_end_pos_vec by start position
-    std::sort(start_end_pos_vec.begin(), start_end_pos_vec.end(), [](const std::tuple<size_t, size_t>& a, const std::tuple<size_t, size_t>& b) {
+    std::sort(start_end_pos_vec.begin(), start_end_pos_vec.end(), [](const auto& a, const auto& b) {
         return std::get<0>(a) < std::get<0>(b);
     });
 
-
-    // Find all the gaps between the start and end positions larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_vec;
-    for (size_t i = 0; i < start_end_pos_vec.size() - 1; ++i) {
-        if ((int)std::get<0>(start_end_pos_vec[i + 1]) - (int)std::get<1>(start_end_pos_vec[i]) > (int)kmer_size) {
-            gap_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_vec[i]), std::get<0>(start_end_pos_vec[i + 1])));
+    gap_vec.reserve(start_end_pos_vec.size());
+
+    for (size_t i = 0; i + 1 < start_end_pos_vec.size(); ++i) {
+        size_t curr_end = std::get<1>(start_end_pos_vec[i]);
+        size_t next_start = std::get<0>(start_end_pos_vec[i + 1]);
+        if (next_start > curr_end + kmer_size) {
+            gap_vec.emplace_back(curr_end, next_start);
         }
     }
 
-    if (gap_vec.empty()) {
-        return;
-    }
+    if (gap_vec.empty()) return;
 
-
-    // Find gaps in the target space
     std::vector<std::tuple<size_t, size_t>> gap_in_tar_space_vec;
-    for (size_t i = 0; i < start_end_pos_in_tar_space_vec.size() - 1; ++i) {
-        if ((int)std::get<0>(start_end_pos_in_tar_space_vec[i + 1]) - (int)(std::get<1>(start_end_pos_in_tar_space_vec[i]) + 5) > (int)kmer_size) {
-            gap_in_tar_space_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_in_tar_space_vec[i]) + 5, std::get<0>(start_end_pos_in_tar_space_vec[i + 1])));
+    gap_in_tar_space_vec.reserve(start_end_pos_in_tar_space_vec.size());
+
+    for (size_t i = 0; i + 1 < start_end_pos_in_tar_space_vec.size(); ++i) {
+        size_t curr_end = std::get<1>(start_end_pos_in_tar_space_vec[i]) + TARGET_GAP_ADJUSTMENT;
+        size_t next_start = std::get<0>(start_end_pos_in_tar_space_vec[i + 1]);
+        if (next_start > curr_end + kmer_size) {
+            gap_in_tar_space_vec.emplace_back(curr_end, next_start);
         } else {
-            //insert a dummy gap
-            gap_in_tar_space_vec.emplace_back(std::make_tuple(0, 0));
+            gap_in_tar_space_vec.emplace_back(0, 0); // dummy
         }
     }
 
-    if (gap_in_tar_space_vec.empty()) {
-        return;
-    }
+    if (gap_in_tar_space_vec.empty()) return;
 
-    // Create a vector of unordered sets for each gap in the target space
-    std::vector<std::unordered_set<size_t>> gap_index_sets(gap_in_tar_space_vec.size());
-    // make sure that the index sets are empty
-    for (size_t i = 0; i < gap_index_sets.size(); ++i) {
-        gap_index_sets[i].clear();
-    }
+    std::vector<std::unordered_set<size_t>> gap_index_sets;
+    gap_index_sets.reserve(gap_in_tar_space_vec.size());
 
-    // Populate the gap index sets
-    for (size_t g = 0; g < gap_in_tar_space_vec.size(); ++g) {
-        for (size_t i = std::get<0>(gap_in_tar_space_vec[g]); i < std::get<1>(gap_in_tar_space_vec[g]); ++i) {
-            gap_index_sets[g].insert(i);
+    for (const auto& gap : gap_in_tar_space_vec) {
+        std::unordered_set<size_t> index_set;
+        for (size_t i = std::get<0>(gap); i < std::get<1>(gap); ++i) {
+            index_set.insert(i);
         }
+        gap_index_sets.emplace_back(std::move(index_set));
     }
 
-    if (gap_index_sets.empty()) {
-        return;
-    }
+    if (gap_index_sets.empty()) return;
 
     std::string small_mibf_path = db_path + "/" + std::to_string(miBf_ID) + ".mibf";
     btllib::MIBloomFilter<uint64_t> small_mi_bf(small_mibf_path);
 
-    // Collect k-mers for all frames and levels
-    std::vector<std::vector<std::tuple<size_t, size_t>>> kmer_pos_per_frame_and_level(3);
+    std::vector<std::vector<std::tuple<size_t, size_t>>> kmer_pos_per_frame_and_level(FRAMES);
 
-    for (size_t frame = 0; frame < 3; ++frame) {
-        for (size_t current_level = 1; current_level <= 3; ++current_level) {
-            // Iterate over each gap
+    for (size_t frame = 0; frame < FRAMES; ++frame) {
+        const std::string& protein = sixframed_xlated_proteins[frame + ori * FRAMES];
+        for (size_t level = 1; level <= 3; ++level) {
             for (size_t g = 0; g < gap_vec.size(); ++g) {
+                if (gap_in_tar_space_vec[g] == std::make_tuple(0ul, 0ul)) continue;
+
                 size_t gap_start = std::get<0>(gap_vec[g]);
                 size_t gap_end = std::get<1>(gap_vec[g]);
-                // check if gap in target space is 0,0, if so skip
-                if (std::get<0>(gap_in_tar_space_vec[g]) == 0 && std::get<1>(gap_in_tar_space_vec[g]) == 0) {
-                    continue;
-                }
+                const auto& index_set = gap_index_sets[g];
 
-                btllib::AAHash aahash(sixframed_xlated_proteins[frame + ori * 3], hash_num, rescue_kmer_size, current_level, gap_start - 1);
+                btllib::AAHash aahash(protein, hash_num, rescue_kmer_size, level, gap_start - 1);
                 aahash.roll();
 
                 while (aahash.get_pos() <= gap_end + 1) {
                     if (small_mi_bf.bv_contains(aahash.hashes())) {
                         auto temp_ID_pos = small_mi_bf.get_id(aahash.hashes());
-                        for (auto& ID_pos : temp_ID_pos) {
-                            auto pos = ID_pos & 0xFFFFFFFF;
-                            if (gap_index_sets[g].find(pos) != gap_index_sets[g].end()) {
+                        for (auto id_pos : temp_ID_pos) {
+                            size_t pos = id_pos & HASH_POS_MASK;
+                            if (index_set.count(pos)) {
                                 kmer_pos_per_frame_and_level[frame].emplace_back(pos, aahash.get_pos());
-                                //gap_index_sets[g].erase(pos);  // Remove the index once it's matched
-                                //break;
                             }
                         }
                     }
@@ -294,55 +294,32 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
         }
     }
 
-    // Perform Dynamic Programming (DP) to find the longest subsequence of valid k-mers with monotonically increasing positions
     std::vector<std::tuple<size_t, size_t>> all_kmers;
     std::set<std::tuple<size_t, size_t>> all_kmers_set;
+    all_kmers.reserve(1000);  // estimate if possible
 
-    for (size_t frame = 0; frame < 3; ++frame) {
+    for (size_t frame = 0; frame < FRAMES; ++frame) {
         for (const auto& kmer : kmer_pos_per_frame_and_level[frame]) {
-            if (all_kmers_set.find(kmer) == all_kmers_set.end()) {
-                all_kmers.push_back(kmer);
-                all_kmers_set.insert(kmer);
+            if (all_kmers_set.insert(kmer).second) {
+                all_kmers.emplace_back(kmer);
             }
-
         }
     }
 
-    // Sort k-mers by their sequence positions
-    std::sort(all_kmers.begin(), all_kmers.end(), [](const std::tuple<size_t, size_t>& a, const std::tuple<size_t, size_t>& b) {
+    std::sort(all_kmers.begin(), all_kmers.end(), [](const auto& a, const auto& b) {
         return std::get<1>(a) < std::get<1>(b);
     });
 
-    // Dynamic Programming to find the longest subsequence of valid k-mers with monotonically increasing positions
-    std::vector<size_t> dp(all_kmers.size(), 1);  // dp[i] = length of longest subsequence ending at i
-
-    for (size_t i = 1; i < all_kmers.size(); ++i) {
-        for (size_t j = 0; j < i; ++j) {
-            if (std::get<1>(all_kmers[i]) > std::get<1>(all_kmers[j])) {
-                dp[i] = std::max(dp[i], dp[j] + 1);
-            }
-        }
-    }
-
     if (!all_kmers.empty()) {
-        size_t prev_pos = std::get<1>(all_kmers[0]);  // safe now
+        size_t prev_pos = std::get<1>(all_kmers[0]);
         for (size_t i = 1; i < all_kmers.size(); ++i) {
             size_t current_pos = std::get<1>(all_kmers[i]);
             size_t gap = current_pos - prev_pos;
-
-            if (gap > 3) {
-                adjusted_kmer_counts += 3;
-            } else {
-                adjusted_kmer_counts += gap;
-            }
-
+            adjusted_kmer_counts += (gap > MIN_KMER_CHAIN_GAP) ? MIN_KMER_CHAIN_GAP : gap;
             prev_pos = current_pos;
         }
-
-        adjusted_kmer_counts += 3;  // final adjustment
+        adjusted_kmer_counts += MIN_KMER_CHAIN_GAP;
     }
-
-    return;
 }
 
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
