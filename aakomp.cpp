@@ -2,8 +2,8 @@
 #include <filesystem>
 #include <fstream>
 #include <getopt.h>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <map>
 #include <omp.h>
 #include <set>
@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+// Third-party libraries
 #include <argparse/argparse.hpp>
 #include <btllib/aahash.hpp>
 #include <btllib/seq.hpp>
@@ -19,16 +20,16 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
-struct frame_block {
+struct FrameBlock {
     size_t frame;
     size_t block_id;
     size_t query_start_in_prot_space;
 
-    // Constructor for convenience
-    frame_block(size_t frame_, size_t block_id_, size_t query_start_in_prot_space_) : frame(frame_), block_id(block_id_), query_start_in_prot_space(query_start_in_prot_space_) {}
+    FrameBlock(size_t frame, size_t block_id, size_t query_start)
+        : frame(frame), block_id(block_id), query_start_in_prot_space(query_start) {}
 };
 
-struct gff_entry {
+struct GFFEntry {
     std::string query_name;
     size_t hit_pos_start;
     size_t hit_pos_end;
@@ -36,62 +37,62 @@ struct gff_entry {
     std::string strand;
     std::string hit_name;
 
-    gff_entry(const std::string& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, const std::string& strand_, const std::string& hit_name_)
-        : query_name(query_name_), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(strand_), hit_name(hit_name_) {}
-
-    gff_entry(std::string&& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, std::string&& strand_, std::string&& hit_name_)
-        : query_name(std::move(query_name_)), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(std::move(strand_)), hit_name(std::move(hit_name_)) {}
+    GFFEntry(const std::string& query, size_t start, size_t end, double score,
+             const std::string& strand, const std::string& hit)
+        : query_name(query), hit_pos_start(start), hit_pos_end(end),
+          score(score), strand(strand), hit_name(hit) {}
 };
 
-struct gff_entry_comparator {
-    bool operator()(const gff_entry& lhs, const gff_entry& rhs) const noexcept {
-        if (lhs.query_name == rhs.query_name) {
+struct GFFEntryComparator {
+    bool operator()(const GFFEntry& lhs, const GFFEntry& rhs) const noexcept {
+        if (lhs.query_name == rhs.query_name)
             return lhs.hit_pos_start < rhs.hit_pos_start;
-        }
         return lhs.query_name < rhs.query_name;
     }
 };
 
-// Define the comparator for FrameBlock
-struct frame_block_comparator {
-    bool operator()(const frame_block& a, const frame_block& b) const {
+struct FrameBlockComparator {
+    bool operator()(const FrameBlock& a, const FrameBlock& b) const noexcept {
         return a.query_start_in_prot_space < b.query_start_in_prot_space;
     }
 };
 
-size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos,
-                 const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
-
-    if (ref_idx + 1 >= vec.size()) {
+size_t look_ahead(
+    const std::vector<std::reference_wrapper<const FrameBlock>>& blocks,
+    size_t current_index,
+    size_t query_end,
+    const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>>& frame_index,
+    size_t offset)
+{
+    if (current_index + 1 >= blocks.size()) {
         return 0;
     }
 
-    // Special logic for the first position check
-    const frame_block &next_frame_block = vec[ref_idx + 1].get();
-    auto next_block_id = next_frame_block.block_id;
-    auto next_frame = next_frame_block.frame;
+    const FrameBlock& next = blocks[current_index + 1].get();
+    auto next_block_id = next.block_id;
+    auto next_frame = next.frame;
 
-    if (end_pos < frame_to_block_id_to_id_and_pos.at(next_frame).at(next_block_id).first) {
+    if (query_end < frame_index.at(next_frame).at(next_block_id).first) {
         return 0;
     }
 
-    // General logic for subsequent positions
     for (size_t i = 2; i <= offset; ++i) {
-        if (ref_idx + i >= vec.size()) {
+        if (current_index + i >= blocks.size()) {
             return 0;
         }
 
-        const frame_block &frame_block_i = vec[ref_idx + i].get();
-        auto block_id = frame_block_i.block_id;
-        auto frame = frame_block_i.frame;
+        const FrameBlock& block = blocks[current_index + i].get();
+        auto block_id = block.block_id;
+        auto frame = block.frame;
 
-        if (end_pos < frame_to_block_id_to_id_and_pos.at(frame).at(block_id).first) {
+        if (query_end < frame_index.at(frame).at(block_id).first) {
             return i - 1;
         }
     }
 
     return 0;
 }
+
 
 void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set,
                     std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block,
@@ -748,15 +749,15 @@ int main(int argc, char* argv[]) {
 
 
     // Create and insert three different instances of gff_set into the vector
-    std::vector<std::set<gff_entry, gff_entry_comparator>> gff_set_vector;
+    std::vector<std::set<GFFEntry, GFFEntryComparator>> gff_set_vector;
     for (int i = 0; i < 3; ++i) {
-        gff_set_vector.emplace_back(gff_entry_comparator());
+        gff_set_vector.emplace_back(GFFEntryComparator());
     }
 
    //std::vector<std::set<std::tuple<std::string, size_t, size_t, double, std::string, std::string>, decltype(gff_comparator)>> pre_gff_set_vector;
-    std::vector<std::set<gff_entry, gff_entry_comparator>> pre_gff_set_vector;
+    std::vector<std::set<GFFEntry, GFFEntryComparator>> pre_gff_set_vector;
     for (int i = 0; i < 3; ++i) {
-        pre_gff_set_vector.emplace_back(gff_entry_comparator());
+        pre_gff_set_vector.emplace_back(GFFEntryComparator());
     }
 
 
@@ -793,11 +794,11 @@ int main(int argc, char* argv[]) {
             // id to count across all frames sorted by count largest to smallest
             std::vector<std::map<uint32_t, size_t, std::greater<size_t>>> id_to_count_across_all_frames_vec(3);
             // id to set of frame and block id and seq pos, set is sorted by seq pos
-            std::vector<std::unordered_map<uint32_t, std::set<frame_block, frame_block_comparator>>> id_to_frame_block_id_and_seq_pos_vec(3);
+            std::vector<std::unordered_map<uint32_t, std::set<FrameBlock, FrameBlockComparator>>> id_to_FrameBlock_id_and_seq_pos_vec(3);
             for (size_t curr_lvl = 1; curr_lvl <= 1; ++curr_lvl) {
                 auto& frame_to_block_id_to_id_and_pos = frame_to_block_id_to_id_and_pos_vec[curr_lvl - 1];
                 auto& id_to_count_across_all_frames = id_to_count_across_all_frames_vec[curr_lvl - 1];
-                auto& id_to_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos_vec[curr_lvl - 1];
+                auto& id_to_FrameBlock_id_and_seq_pos = id_to_FrameBlock_id_and_seq_pos_vec[curr_lvl - 1];
                 auto& gff_set = gff_set_vector[curr_lvl - 1];
                 auto& pre_gff_set = pre_gff_set_vector[curr_lvl - 1];
                 auto& seq_name_to_completeness = seq_name_to_completeness_vec[curr_lvl - 1];
@@ -901,7 +902,7 @@ int main(int argc, char* argv[]) {
                                 continue;
                             }
                             frame_to_block_id_to_id_and_pos[frame][block_id] = std::make_pair(*ID_pos_set.second.begin(), *ID_pos_set.second.rbegin());
-                            id_to_frame_block_id_and_seq_pos[ID_pos_set.first].emplace(frame, block_id, seq_pos);
+                            id_to_FrameBlock_id_and_seq_pos[ID_pos_set.first].emplace(frame, block_id, seq_pos);
 
     #pragma omp critical
                             {
@@ -933,21 +934,21 @@ int main(int argc, char* argv[]) {
                     {
                         std::cerr << "ID: " << ID_count.first << " count: " << ID_count.second << std::endl;
                     }
-                    // print id_to_frame_block_id_and_seq_pos
-                    for (auto &ID_frame_block_id_seq_pos : id_to_frame_block_id_and_seq_pos)
+                    // print id_to_FrameBlock_id_and_seq_pos
+                    for (auto &ID_FrameBlock_id_seq_pos : id_to_FrameBlock_id_and_seq_pos)
                     {
-                        std::cerr << "ID: " << ID_frame_block_id_seq_pos.first << std::endl;
-                        std::cerr << "name: " << miBf_ID_to_seq_ID_and_len[ID_frame_block_id_seq_pos.first].first << std::endl;
-                        for (auto &frame_block_id_seq_pos : ID_frame_block_id_seq_pos.second)
+                        std::cerr << "ID: " << ID_FrameBlock_id_seq_pos.first << std::endl;
+                        std::cerr << "name: " << miBf_ID_to_seq_ID_and_len[ID_FrameBlock_id_seq_pos.first].first << std::endl;
+                        for (auto &FrameBlock_id_seq_pos : ID_FrameBlock_id_seq_pos.second)
                         {
-                            std::cerr << "frame: " << frame_block_id_seq_pos.frame << " block_id: " << frame_block_id_seq_pos.block_id << " seq_pos: " << frame_block_id_seq_pos.query_start_in_prot_space << std::endl;
+                            std::cerr << "frame: " << FrameBlock_id_seq_pos.frame << " block_id: " << FrameBlock_id_seq_pos.block_id << " seq_pos: " << FrameBlock_id_seq_pos.query_start_in_prot_space << std::endl;
                         }
                     }
                     // print frame_to_block_id_to_id_and_pos
-                    for (auto &frame_block_id_to_id_and_pos : frame_to_block_id_to_id_and_pos)
+                    for (auto &FrameBlock_id_to_id_and_pos : frame_to_block_id_to_id_and_pos)
                     {
-                        std::cerr << "frame: " << frame_block_id_to_id_and_pos.first << std::endl;
-                        for (auto &block_id_to_id_and_pos : frame_block_id_to_id_and_pos.second)
+                        std::cerr << "frame: " << FrameBlock_id_to_id_and_pos.first << std::endl;
+                        for (auto &block_id_to_id_and_pos : FrameBlock_id_to_id_and_pos.second)
                         {
                             std::cerr << "block_id: " << block_id_to_id_and_pos.first << " smallest pos: " << block_id_to_id_and_pos.second.first << " largest pos: " << block_id_to_id_and_pos.second.second << std::endl;
                         }
@@ -991,30 +992,30 @@ int main(int argc, char* argv[]) {
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_vec;
                     std::vector<std::tuple<size_t, size_t>> start_end_pos_tar_vec;
                     
-                    std::vector<std::reference_wrapper<const frame_block>> vec;
-                    for (auto &frame_block_id_and_seq_pos : id_to_frame_block_id_and_seq_pos[miBf_ID])
+                    std::vector<std::reference_wrapper<const FrameBlock>> vec;
+                    for (auto &FrameBlock_id_and_seq_pos : id_to_FrameBlock_id_and_seq_pos[miBf_ID])
                     {
-                        vec.push_back(frame_block_id_and_seq_pos);
+                        vec.push_back(FrameBlock_id_and_seq_pos);
                     }
                     for (size_t ref_idx = 0; ref_idx < vec.size(); ++ref_idx)
                     {
-                        const frame_block &frame_block_id_and_seq_pos = vec[ref_idx].get();
+                        const FrameBlock &FrameBlock_id_and_seq_pos = vec[ref_idx].get();
 
                         if (verbose_flag) {
-                            /*std::cerr << "frame: " << std::get<0>(frame_block_id_and_seq_pos) << " block_id: " << std::get<1>(frame_block_id_and_seq_pos) << " seq_pos: " << std::get<2>(frame_block_id_and_seq_pos) << std::endl;
+                            /*std::cerr << "frame: " << std::get<0>(FrameBlock_id_and_seq_pos) << " block_id: " << std::get<1>(FrameBlock_id_and_seq_pos) << " seq_pos: " << std::get<2>(FrameBlock_id_and_seq_pos) << std::endl;
                             std::cerr << "curr end_pos: " << end_pos << std::endl;
-                            std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(frame_block_id_and_seq_pos)][std::get<1>(frame_block_id_and_seq_pos)].first << std::endl;
+                            std::cerr << "next start_pos: " << frame_to_block_id_to_id_and_pos[std::get<0>(FrameBlock_id_and_seq_pos)][std::get<1>(FrameBlock_id_and_seq_pos)].first << std::endl;
                             std::cerr << std::endl;*/
                         }
 
                         if (frame == 3) {
-                            frame = frame_block_id_and_seq_pos.frame;
-                            seq_start_in_nucleotide = frame_block_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
+                            frame = FrameBlock_id_and_seq_pos.frame;
+                            seq_start_in_nucleotide = FrameBlock_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
                         } else {
-                            frame = frame_block_id_and_seq_pos.frame;
+                            frame = FrameBlock_id_and_seq_pos.frame;
                         }
 
-                        size_t block_id = frame_block_id_and_seq_pos.block_id;
+                        size_t block_id = FrameBlock_id_and_seq_pos.block_id;
 
 
 
@@ -1023,14 +1024,14 @@ int main(int argc, char* argv[]) {
 
                         
                             prev_block_start = block_start;
-                            block_start = frame_block_id_and_seq_pos.query_start_in_prot_space;
+                            block_start = FrameBlock_id_and_seq_pos.query_start_in_prot_space;
                             prev_block_len = block_len;
                             block_len = frame_to_block_id_to_id_and_pos[frame][block_id].second - frame_to_block_id_to_id_and_pos[frame][block_id].first + 1;
                             
 
 
                             if (start_end_pos_vec.empty()) {
-                                start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));\
+                                start_end_pos_vec.emplace_back(std::make_tuple(FrameBlock_id_and_seq_pos.query_start_in_prot_space, FrameBlock_id_and_seq_pos.query_start_in_prot_space + block_len - 1));\
                                 start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                             }
 
@@ -1048,7 +1049,7 @@ int main(int argc, char* argv[]) {
                             {
                                 if (end_pos < frame_to_block_id_to_id_and_pos[frame][block_id].first)
                                 {
-                                    start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
+                                    start_end_pos_vec.emplace_back(std::make_tuple(FrameBlock_id_and_seq_pos.query_start_in_prot_space, FrameBlock_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
                                     start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     if (frame_to_block_id_to_id_and_pos[frame][block_id].first - end_pos >= kmer_size) {
                                         adjusted_kmer_counts += block_len + kmer_size - 1; //TODO adjust for kmer size overlap
@@ -1106,10 +1107,10 @@ int main(int argc, char* argv[]) {
                                     
                                     end_pos = frame_to_block_id_to_id_and_pos[frame][block_id].second;
                                     adjusted_kmer_counts = block_len;
-                                    seq_start_in_nucleotide = frame_block_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
+                                    seq_start_in_nucleotide = FrameBlock_id_and_seq_pos.query_start_in_prot_space * 3 + frame;
                                     start_end_pos_vec.clear();
                                     start_end_pos_tar_vec.clear();
-                                    start_end_pos_vec.emplace_back(std::make_tuple(frame_block_id_and_seq_pos.query_start_in_prot_space, frame_block_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
+                                    start_end_pos_vec.emplace_back(std::make_tuple(FrameBlock_id_and_seq_pos.query_start_in_prot_space, FrameBlock_id_and_seq_pos.query_start_in_prot_space + block_len - 1));
                                     start_end_pos_tar_vec.emplace_back(std::make_tuple(frame_to_block_id_to_id_and_pos[frame][block_id].first, frame_to_block_id_to_id_and_pos[frame][block_id].second + 1));
                                     if (verbose_flag){
                                         std::cerr << "new end_pos: " << end_pos << std::endl;
@@ -1138,9 +1139,9 @@ int main(int argc, char* argv[]) {
                     seq_name_to_completeness[seq_name].incomplete_copies += incomplete_copies;
                     {
 
-                        const auto &last_frame_block_id_and_seq_pos = id_to_frame_block_id_and_seq_pos[miBf_ID].rbegin();
-                        frame = (*last_frame_block_id_and_seq_pos).frame;
-                        seq_end_in_nucleotide = ((*last_frame_block_id_and_seq_pos).query_start_in_prot_space + block_len + kmer_size - 1) * 3 + frame;
+                        const auto &last_FrameBlock_id_and_seq_pos = id_to_FrameBlock_id_and_seq_pos[miBf_ID].rbegin();
+                        frame = (*last_FrameBlock_id_and_seq_pos).frame;
+                        seq_end_in_nucleotide = ((*last_FrameBlock_id_and_seq_pos).query_start_in_prot_space + block_len + kmer_size - 1) * 3 + frame;
                         // print all the values that make seq_end_in_nucleotide
                         double score = (double)adjusted_kmer_counts / (double)expected_kmer_counts;
                         if (score > 1) {
