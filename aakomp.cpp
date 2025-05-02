@@ -25,7 +25,31 @@ struct frame_block {
     size_t query_start_in_prot_space;
 
     // Constructor for convenience
-    frame_block(size_t f, size_t b, size_t q) : frame(f), block_id(b), query_start_in_prot_space(q) {}
+    frame_block(size_t frame_, size_t block_id_, size_t query_start_in_prot_space_) : frame(frame_), block_id(block_id_), query_start_in_prot_space(query_start_in_prot_space_) {}
+};
+
+struct gff_entry {
+    std::string query_name;
+    size_t hit_pos_start;
+    size_t hit_pos_end;
+    double score;
+    std::string strand;
+    std::string hit_name;
+
+    gff_entry(const std::string& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, const std::string& strand_, const std::string& hit_name_)
+        : query_name(query_name_), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(strand_), hit_name(hit_name_) {}
+
+    gff_entry(std::string&& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, std::string&& strand_, std::string&& hit_name_)
+        : query_name(std::move(query_name_)), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(std::move(strand_)), hit_name(std::move(hit_name_)) {}
+};
+
+struct gff_entry_comparator {
+    bool operator()(const gff_entry& lhs, const gff_entry& rhs) const noexcept {
+        if (lhs.query_name == rhs.query_name) {
+            return lhs.hit_pos_start < rhs.hit_pos_start;
+        }
+        return lhs.query_name < rhs.query_name;
+    }
 };
 
 // Define the comparator for FrameBlock
@@ -35,7 +59,7 @@ struct frame_block_comparator {
     }
 };
 
-size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos, 
+size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &vec, size_t ref_idx, size_t end_pos,
                  const std::unordered_map<size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>> &frame_to_block_id_to_id_and_pos, size_t offset) {
 
     if (ref_idx + 1 >= vec.size()) {
@@ -69,8 +93,8 @@ size_t look_ahead(const std::vector<std::reference_wrapper<const frame_block>> &
     return 0;
 }
 
-void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set, 
-                    std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block, 
+void process_hashes(const std::vector<uint64_t>& temp_ID_pos, std::unordered_set<uint32_t>& id_set,
+                    std::unordered_map<uint32_t, std::set<uint32_t>>& id_to_pos_set, bool& extend_block,
                     std::vector<uint32_t>& ids_vec, std::vector<uint32_t>& temp_pos_vec, const btllib::MIBloomFilter<uint64_t>& mi_bf)
 {
     bool found = false;
@@ -200,54 +224,6 @@ std::vector<std::string> sixframe_translate(const std::string &dna)
     return protein;
 }
 
-btllib::MIBloomFilter<uint64_t> make_mibf(const std::string& seq, const size_t hash_num, const size_t kmer_size) 
-{
-    size_t filter_size = seq.size() * 3;
-    if (filter_size < 100000) {
-        filter_size = 100000;
-    }
-    btllib::MIBloomFilter<uint64_t> mi_bf(calc_optimal_size(filter_size, 1, 0.1), 1);
-    for (int stage = 0; stage < 3; stage++)
-    {
-
-        btllib::AAHash itr(seq, hash_num, kmer_size, 1);
-        btllib::AAHash itr2(seq, hash_num, kmer_size, 2);
-        btllib::AAHash itr3(seq, hash_num, kmer_size, 3);
-        size_t miBf_ID = 1;
-        
-
-        while (itr.roll() && itr2.roll() && itr3.roll())
-        {
-            if (stage == 0)
-            {
-                mi_bf.insert_bv(itr.hashes());
-                mi_bf.insert_bv(itr2.hashes());
-                mi_bf.insert_bv(itr3.hashes());
-            }
-            else if (stage == 1)
-            {
-                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
-                mi_bf.insert_id(itr.hashes(), new_ID);
-                mi_bf.insert_id(itr2.hashes(), new_ID);
-                mi_bf.insert_id(itr3.hashes(), new_ID);
-            }
-            else
-            {
-                uint64_t new_ID = (uint64_t)miBf_ID << 32 | itr.get_pos();
-                mi_bf.insert_saturation(itr.hashes(), new_ID);
-                mi_bf.insert_saturation(itr2.hashes(), new_ID);
-                mi_bf.insert_saturation(itr3.hashes(), new_ID);
-            }
-        }
-        
-        if (stage == 0)
-        {
-            mi_bf.complete_bv_insertion();
-        }
-    }
-    return mi_bf;
-
-}
 
 void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
                   std::vector<std::tuple<size_t, size_t>>& start_end_pos_in_tar_space_vec,
@@ -262,6 +238,7 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
         return std::get<0>(a) < std::get<0>(b);
     });
 
+
     // Find all the gaps between the start and end positions larger than kmer_size
     std::vector<std::tuple<size_t, size_t>> gap_vec;
     for (size_t i = 0; i < start_end_pos_vec.size() - 1; ++i) {
@@ -269,9 +246,11 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
             gap_vec.emplace_back(std::make_tuple(std::get<1>(start_end_pos_vec[i]), std::get<0>(start_end_pos_vec[i + 1])));
         }
     }
+
     if (gap_vec.empty()) {
         return;
     }
+
 
     // Find gaps in the target space
     std::vector<std::tuple<size_t, size_t>> gap_in_tar_space_vec;
@@ -284,11 +263,9 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
         }
     }
 
-
     if (gap_in_tar_space_vec.empty()) {
         return;
     }
-
 
     // Create a vector of unordered sets for each gap in the target space
     std::vector<std::unordered_set<size_t>> gap_index_sets(gap_in_tar_space_vec.size());
@@ -376,28 +353,26 @@ void fill_in_gaps(std::vector<std::tuple<size_t, size_t>>& start_end_pos_vec,
         }
     }
 
+    if (!all_kmers.empty()) {
+        size_t prev_pos = std::get<1>(all_kmers[0]);  // safe now
+        for (size_t i = 1; i < all_kmers.size(); ++i) {
+            size_t current_pos = std::get<1>(all_kmers[i]);
+            size_t gap = current_pos - prev_pos;
 
-    // Improved adjusted_kmer_counts logic: go through the list and calculate the gap differences
-    size_t prev_pos = std::get<1>(all_kmers[0]);  // Start from the first k-mer position
-    for (size_t i = 1; i < all_kmers.size(); ++i) {
-        size_t current_pos = std::get<1>(all_kmers[i]);
-        size_t gap = current_pos - prev_pos;
+            if (gap > 3) {
+                adjusted_kmer_counts += 3;
+            } else {
+                adjusted_kmer_counts += gap;
+            }
 
-        if (gap > 3) {
-            adjusted_kmer_counts += 3;  // If gap is greater than 3, add 3
-        } else {
-            adjusted_kmer_counts += gap;  // If gap is 3 or less, add the actual gap value
+            prev_pos = current_pos;
         }
 
-        prev_pos = current_pos;  // Update the previous position
+        adjusted_kmer_counts += 3;  // final adjustment
     }
-
-    // Optionally add the last adjustment if needed
-    adjusted_kmer_counts += 3;  // Add 3 for the last k-mer (or adjust this logic as required)
 
     return;
 }
-
 
 bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahash, std::deque<std::vector<uint32_t>> &miBf_IDs_snapshot, std::deque<std::vector<uint32_t>> &miBf_pos_snapshot, std::unordered_map<uint32_t, size_t> &id_to_count)
 {
@@ -544,30 +519,6 @@ bool explore_frame(btllib::MIBloomFilter<uint64_t> &mi_bf, btllib::AAHash &aahas
 
     return false;
 }
-struct gff_entry {
-    std::string query_name;
-    size_t hit_pos_start;
-    size_t hit_pos_end;
-    double score;
-    std::string strand;
-    std::string hit_name;
-
-    gff_entry(const std::string& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, const std::string& strand_, const std::string& hit_name_)
-        : query_name(query_name_), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(strand_), hit_name(hit_name_) {}
-    
-    gff_entry(std::string&& query_name_, size_t hit_pos_start_, size_t hit_pos_end_, double score_, std::string&& strand_, std::string&& hit_name_)
-        : query_name(std::move(query_name_)), hit_pos_start(hit_pos_start_), hit_pos_end(hit_pos_end_), score(score_), strand(std::move(strand_)), hit_name(std::move(hit_name_)) {}
-};
-
-struct gff_entry_comparator {
-    bool operator()(const gff_entry& lhs, const gff_entry& rhs) const noexcept {
-        if (lhs.query_name == rhs.query_name) {
-            return lhs.hit_pos_start < rhs.hit_pos_start;
-        }
-        return lhs.query_name < rhs.query_name;
-    }
-};
-
 
 
 // main function that takes in command line arguments using getopt
@@ -613,22 +564,18 @@ int main(int argc, char* argv[]) {
     
     program.add_argument("-h", "--hash")
         .help("Number of hash functions")
-        .default_value(uint8_t(1))
+        .default_value(uint8_t(9))
         .scan<'u', uint8_t>();
     
     program.add_argument("-k", "--kmer")
         .help("K-mer size")
-        .default_value(uint8_t(10))
+        .default_value(uint8_t(9))
         .scan<'u', uint8_t>();
-    
-    program.add_argument("-g", "--genome")
-        .help("Genome size")
-        .default_value(uint64_t(0))
-        .scan<'u', uint64_t>();
+
     
     program.add_argument("-l", "--lower_bound")
         .help("Lower bound value")
-        .default_value(0.8)
+        .default_value(0.7)
         .scan<'g', double>();
 
     program.add_argument("-rks", "--rescue_kmer")
@@ -661,7 +608,6 @@ int main(int argc, char* argv[]) {
     uint8_t hash_num = program.get<uint8_t>("--hash");
     uint8_t kmer_size = program.get<uint8_t>("--kmer");
     size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
-    uint64_t genome_size = program.get<uint64_t>("--genome");
     double lower_bound = program.get<double>("--lower_bound");
     size_t max_offset = program.get<size_t>("--max_offset");
 
@@ -724,7 +670,6 @@ int main(int argc, char* argv[]) {
                   << "Hash number: " << (uint64_t)hash_num << "\n"
                   << "Kmer size: " << (uint64_t)kmer_size << "\n"
                   << "Rescue kmer size: " << rescue_kmer_size << "\n"
-                  << "Genome size: " << genome_size << "\n"
                   << "Lower bound: " << lower_bound << "\n"
                   << "DB Path Location: " << db_path_loc << "\n"
                   << "Max offset: " << max_offset << "\n"
@@ -744,12 +689,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "Reading reference file: " << reference_path << std::endl;
     }
 
-    // read through reference file which is a fasta file and count the number of characters in the sequences and assign it genome_size
-    btllib::SeqReader ref_reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
-    for (const auto record : ref_reader)
-    {
-        genome_size += record.seq.size();
-    }
 
     if (verbose_flag)
     {
@@ -769,11 +708,6 @@ int main(int argc, char* argv[]) {
             // insert miBf_ID into miBf_ID_to_seq_ID_and_len with value record.id and record.seq.size()
             miBf_ID_to_seq_ID_and_len[miBf_ID] = std::make_pair(record.id, record.seq.size());
             miBf_ID_to_seq[miBf_ID] = record.seq;
-            if (record.seq.size() == 0)
-            {
-                std::cerr << "seq name: " << record.id << std::endl;
-                exit(0);
-            }
             ++miBf_ID;
         }
     }
@@ -787,9 +721,13 @@ int main(int argc, char* argv[]) {
   
     auto sTime = omp_get_wtime();
     btllib::MIBloomFilter<uint64_t> mi_bf(mibf_path);
-    std::cerr << "finished making MiBF" << std::endl;
-    std::cerr << "in " << std::setprecision(4) << std::fixed << omp_get_wtime() - sTime
+    auto sTime2 = omp_get_wtime();
+    if (verbose_flag)
+    {
+    std::cerr << "finished reading miBf" << std::endl;
+    std::cerr << "in " << std::setprecision(4) << std::fixed << sTime2 - sTime
               << "\n";
+    }
     
     
 
