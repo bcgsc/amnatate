@@ -182,19 +182,6 @@ void process_hashes(
     }
 }
 
-struct CustomComparator {
-    bool operator()(const std::tuple<size_t, size_t, size_t>& a, const std::tuple<size_t, size_t, size_t>& b) const {
-        return std::get<2>(a) < std::get<2>(b);
-    }
-};
-
-size_t calc_optimal_size(size_t entries, unsigned hash_num, double occupancy)
-{
-    size_t non64ApproxVal =
-        size_t(-double(entries) * double(hash_num) / log(1.0 - occupancy));
-    return non64ApproxVal + (64 - non64ApproxVal % 64);
-}
-
 std::vector<std::string> sixframe_translate(const std::string &dna)
 {
     std::vector<std::string> protein;
