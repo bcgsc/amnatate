@@ -18,8 +18,8 @@
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
 
-static constexpr size_t MIN_TARGETTED_MIBF_SIZE = 100000;
-static constexpr size_t MIN_MAIN_MIBF_SIZE = 1000000;
+static constexpr size_t MIN_TARGETTED_MIBF_SIZE = 1000;
+static constexpr size_t MIN_MAIN_MIBF_SIZE = 100000;
 static constexpr double TARGET_FALSE_POSITIVE_RATE = 0.1;
 static constexpr size_t STAGES = 3;
 static constexpr size_t SIZE_MULTIPLIER = 3;
@@ -70,9 +70,9 @@ int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("miBf_Construction");
 
     program.add_argument("--help")
-           .help("Display this help message")
-           .default_value(false)
-           .implicit_value(true);
+        .help("Display this help message")
+        .default_value(false)
+        .implicit_value(true);
 
     program.add_argument("-i", "--input")
         .help("Input file name")
@@ -102,9 +102,14 @@ int main(int argc, char* argv[]) {
         .scan<'u', uint8_t>();
 
     program.add_argument("-v", "--verbose")
-           .help("Verbose output")
-           .default_value(false)
-           .implicit_value(true);
+        .help("Verbose output")
+        .default_value(false)
+        .implicit_value(true);
+
+    program.add_argument("-rks", "--rescue_kmer")
+        .help("Rescue k-mer size")
+        .default_value(uint8_t(4))
+        .scan<'u', uint8_t>();
 
     try {
         program.parse_args(argc, argv);
@@ -121,6 +126,7 @@ int main(int argc, char* argv[]) {
     std::string output_prefix = program.get<std::string>("--output");
     uint8_t hash_num = program.get<uint8_t>("--hash");
     uint8_t kmer_size = program.get<uint8_t>("--kmer");
+    uint8_t rescue_kmer_size = program.get<uint8_t>("--rescue_kmer");
 
     if (help_flag) {
         std::cerr << program << std::endl;
@@ -133,7 +139,9 @@ int main(int argc, char* argv[]) {
                   << "Reference path: " << reference_path << "\n"
                   << "Threads: " << threads << "\n"
                   << "Hash number: " << static_cast<uint64_t>(hash_num) << "\n"
-                  << "Kmer size: " << static_cast<uint64_t>(kmer_size) << std::endl;
+                  << "Kmer size: " << static_cast<uint64_t>(kmer_size) << "\n"
+                  << "Rescue kmer size: " << static_cast<uint64_t>(rescue_kmer_size) << "\n"
+                  << std::endl;
     }
 
     omp_set_num_threads(threads);
@@ -177,7 +185,7 @@ int main(int argc, char* argv[]) {
     }
 
     auto sTime = omp_get_wtime();
-    for (size_t stage = 0; stage < 3; ++stage) {
+    for (size_t stage = 0; stage < STAGES; ++stage) {
         if (verbose_flag) {
             std::cerr << "stage: " << stage << std::endl;
         }
@@ -221,9 +229,9 @@ int main(int argc, char* argv[]) {
     btllib::SeqReader reader(reference_path, btllib::SeqReader::Flag::LONG_MODE);
 #pragma omp parallel
     for (const auto& record : reader) {
-        auto mi_bf_small = make_small_mibf(record.seq, hash_num, kmer_size);
+        auto mi_bf_small = make_small_mibf(record.seq, hash_num, rescue_kmer_size);
         const auto& miBf_ID = seq_ID_to_miBf_ID[record.id];
-        mi_bf_small.save(std::to_string(miBf_ID) + ".mibf");
+        mi_bf_small.save(output_prefix + "." + std::to_string(miBf_ID) + ".mibf");
     }
 
     std::cerr << "finished making small miBf" << std::endl;
