@@ -5,8 +5,16 @@ jobs:
       vmImage: "ubuntu-latest"
 
     steps:
-      - script: echo "##vso[task.prependpath]$CONDA/bin"
-        displayName: Add conda to PATH
+      - script: |
+          mkdir -p ~/miniforge3
+          curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh  -o ~/miniforge3/miniforge.sh
+          bash ~/miniforge3/miniforge.sh -b -u -p ~/miniforge3
+          rm -rf  ~/miniforge3/miniforge.sh
+          ~/miniforge3/bin/conda init bash
+          ~/miniforge3/bin/conda init zsh
+          export CONDA=$(realpath ~/miniforge3/bin)
+          echo "##vso[task.prependpath]$CONDA"
+        displayName: Install conda
       - script: conda create --yes --quiet --name aakomp_CI
         displayName: Create Anaconda environment
       - script: |
@@ -20,3 +28,33 @@ jobs:
           cd build
           ninja install
         displayName: Compile aaKomp
+
+  - job:
+    displayName: mac_latest-compilers-clang
+    pool:
+      vmImage: 'macOS-latest'
+    steps:
+      - script: |
+          mkdir -p ~/miniforge3
+          curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh  -o ~/miniforge3/miniforge.sh
+          bash ~/miniforge3/miniforge.sh -b -u -p ~/miniforge3
+          rm -rf  ~/miniforge3/miniforge.sh
+          ~/miniforge3/bin/conda init bash
+          ~/miniforge3/bin/conda init zsh
+          export CONDA=$(realpath ~/miniforge3/bin)
+          echo "##vso[task.prependpath]$CONDA"
+        displayName: Install conda
+      - script: conda create --yes --quiet --name aakomp_CI
+        displayName: Create Anaconda environment
+      - script: |
+          source activate aakomp_CI
+          conda install --yes -c conda-forge mamba python=3.9
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib
+        displayName: Install dependencies
+      - script: |
+          source activate aakomp_CI
+          meson build --prefix=$(pwd)/test_build
+          cd build
+          ninja install
+        displayName: Compile aaKomp
+
