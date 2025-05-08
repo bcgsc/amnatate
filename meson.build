@@ -39,3 +39,6 @@ executable('make_mibf',
     include_directories : inc_dirs,
     install : true
 )
+
+scripts = ['run-aakomp', 'aakomp_score.py']
+install_data(scripts, install_dir : 'bin', install_mode : 'rwxr-xr--')
