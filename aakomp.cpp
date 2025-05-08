@@ -212,7 +212,8 @@ void fill_in_gaps(
     size_t hash_num, size_t rescue_kmer_size,
     const std::vector<std::string>& sixframed_xlated_proteins,
     size_t ori, size_t kmer_size,
-    uint32_t miBf_ID, const std::string& db_path)
+    uint32_t miBf_ID, const std::string& db_path,
+    const std::string& mibf_prefix)
 {
     const size_t MIN_KMER_CHAIN_GAP = rescue_kmer_size - 1;
     const size_t TARGET_GAP_ADJUSTMENT = rescue_kmer_size + 1;
@@ -262,7 +263,7 @@ void fill_in_gaps(
 
     if (gap_index_sets.empty()) return;
 
-    std::string small_mibf_path = db_path + "/" + std::to_string(miBf_ID) + ".mibf";
+    std::string small_mibf_path = db_path + "/" + mibf_prefix + "." + std::to_string(miBf_ID) + ".mibf";
     btllib::MIBloomFilter<uint64_t> small_mi_bf(small_mibf_path);
 
     std::vector<std::vector<std::tuple<size_t, size_t>>> kmer_pos_per_frame_and_level(FRAMES);
@@ -545,6 +546,7 @@ int main(int argc, char* argv[]) {
     size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
     double lower_bound = program.get<double>("--lower_bound");
     size_t max_offset = program.get<size_t>("--max_offset");
+    std::string mibf_prefix = std::filesystem::path(mibf_path).stem().string();
 
     std::string db_path_loc = "./";
     if (!mibf_path.empty()) {
@@ -959,7 +961,7 @@ int main(int argc, char* argv[]) {
                                     if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                                     {
                                         if (start_end_pos_vec.size() > 1) {
-                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID, db_path_loc);
+                                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID, db_path_loc, mibf_prefix);
                                         }
                                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                                             complete_copies++;
@@ -1002,7 +1004,7 @@ int main(int argc, char* argv[]) {
                      if (adjusted_kmer_counts > lower_bound * expected_kmer_counts)
                     {
                         if (start_end_pos_vec.size() > 1) {
-                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID, db_path_loc);
+                            fill_in_gaps(start_end_pos_vec, start_end_pos_tar_vec, adjusted_kmer_counts, hash_num, rescue_kmer_size, sixframed_xlated_proteins, ori, kmer_size, miBf_ID, db_path_loc, mibf_prefix);
                         }
                         if (adjusted_kmer_counts > 0.95 * expected_kmer_counts) {
                             complete_copies++;
