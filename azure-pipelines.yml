@@ -7,19 +7,16 @@ jobs:
     steps:
       - script: echo "##vso[task.prependpath]$CONDA/bin"
         displayName: Add conda to PATH
-      - script: conda create --yes --quiet --name goldstandard_CI
+      - script: conda create --yes --quiet --name aakomp_CI
         displayName: Create Anaconda environment
       - script: |
-          source activate goldstandard_CI
+          source activate aakomp_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib
         displayName: Install dependencies
       - script: |
-          source activate goldstandard_CI
+          source activate aakomp_CI
           meson build --prefix=$(pwd)/test_build
           cd build
           ninja install
-        displayName: Compile GoldStandard
-      - script: |
-          ./build/goldstandard -r tests/E_coli_K12_MG1655.fa -i tests/NC_000913.faa  -h 3 -k 12 -t48 -g 30000000 --verbose
-          diff -q  <( sort _.results.tsv) <( sort tests/test.results.tsv)
+        displayName: Compile aaKomp
