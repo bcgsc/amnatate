@@ -7,4 +7,5 @@ libdivsufsort
 btllib
 libsequence 
 zlib
-
+numpy
+matplotlib
