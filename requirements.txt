@@ -9,3 +9,4 @@ libsequence
 zlib
 numpy
 matplotlib
+boost-cpp
