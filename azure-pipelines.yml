@@ -20,16 +20,18 @@ jobs:
       - script: |
           source activate aakomp_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib boost-cpp
         displayName: Install dependencies
       - script: |
           source activate aakomp_CI
+          export BOOST_ROOT=$CONDA_PREFIX
           meson build --prefix=$(pwd)/test_build
           cd build
           ninja install
         displayName: Compile aaKomp
       - script: |
           source activate aakomp_CI
+          export BOOST_ROOT=$CONDA_PREFIX
           export PATH=$(pwd)/test_build/bin:$PATH
           cd test
           ./aakomp_test_demo.sh
@@ -55,10 +57,11 @@ jobs:
       - script: |
           source activate aakomp_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib boost-cpp
         displayName: Install dependencies
       - script: |
           source activate aakomp_CI
+          export BOOST_ROOT=$CONDA_PREFIX
           meson build --prefix=$(pwd)/test_build
           cd build
           ninja install
