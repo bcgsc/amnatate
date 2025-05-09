@@ -14,11 +14,17 @@
 
 // Third-party libraries
 #include <argparse/argparse.hpp>
+#include <boost/math/distributions/empirical_cumulative_distribution_function.hpp>
+#include <boost/math/quadrature/trapezoidal.hpp>
 #include <btllib/aahash.hpp>
 #include <btllib/seq.hpp>
 #include <btllib/seq_reader.hpp>
 #include <btllib/mi_bloom_filter.hpp>
 #include <Sequence/Translate.hpp>
+
+
+using boost::math::empirical_cumulative_distribution_function;
+using boost::math::quadrature::trapezoidal;
 
 static constexpr uint32_t HASH_ID_SHIFT = 32;
 static constexpr uint32_t HASH_POS_MASK = 0xFFFFFFFF;
@@ -1048,7 +1054,7 @@ int main(int argc, char* argv[]) {
         output_file << seq_name_completeness.first << "\t" << seq_name_completeness.second.complete_copies << "\t" << seq_name_completeness.second.incomplete_copies << "\t" << seq_name_completeness.second.expected_kmer_counts << "\t" << seq_name_completeness.second.highest_adjusted_kmer_counts << std::endl;
     }
 
-
+    std::unordered_map<std::string, double> seq_name_to_score;
     for (auto &gff : gff_set)
     {
         gff_file << gff.query_name << "\t"
@@ -1059,7 +1065,35 @@ int main(int argc, char* argv[]) {
                     << "0"
                     << "\t"
                     << "ID=" << gff.hit_name << std::endl;
+        if (seq_name_to_score.find(gff.hit_name) == seq_name_to_score.end())
+        {
+
+            seq_name_to_score[gff.hit_name] = gff.score;
+        }
+        else
+        {
+        if (seq_name_to_score[gff.hit_name] < gff.score)
+        {
+            seq_name_to_score[gff.hit_name] = gff.score;
+        }
+        }
     }
+    std::vector<double> scores_vec;
+    for (auto &seq_name_score : seq_name_to_score)
+    {
+        scores_vec.push_back(seq_name_score.second);
+        std::cerr << seq_name_score.second << std::endl;
+    }
+    auto ecdf = empirical_cumulative_distribution_function(std::move(scores_vec));
+
+    double result = (1 - trapezoidal(ecdf, 0.0, 1.0)) * 100;
+
+    std::cout << "aaKomp score for " << input_file << " is: " << result << std::endl;
+
+    //write result to text file
+    std::string result_file = output_prefix + "_score.txt";
+    std::ofstream result_out(result_file);
+    result_out << result << std::endl;
 
     if (debug_flag) {
         for (auto &gff : pre_gff_set)

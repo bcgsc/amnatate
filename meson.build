@@ -15,14 +15,15 @@ sdsl_dep = compiler.find_library('sdsl')
 sequence_dep = compiler.find_library('sequence')
 z_dep = compiler.find_library('z')
 btllib_dep =  compiler.find_library('btllib')
+boost_dep = dependency('boost')
 
-rootpath = meson.source_root()
+rootpath = meson.project_source_root()
 
 aakomp_src_files = [ 'aakomp.cpp' ]
 make_mibf_src_files = [ 'make_mibf.cpp' ]
 inc_dirs = [ 'argparse' ]
-deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep ]
-link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz' ]
+deps = [ btllib_dep, threads_dep, openmp_dep, tcmalloc_dep, divsufsort_dep, divsufsort64_dep, sdsl_dep, sequence_dep, z_dep, boost_dep ]
+link_args = [ '-ltcmalloc', '-lsdsl', '-ldivsufsort', '-ldivsufsort64', '-lbtllib', '-lsequence', '-lz']
 
 executable('aakomp',
     aakomp_src_files,
