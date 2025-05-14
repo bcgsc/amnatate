@@ -666,7 +666,7 @@ int main(int argc, char* argv[]) {
     std::ofstream gff_file;
     std::ofstream pre_gff_file;
 
-    std::string filename = output_prefix + ".results.tsv";
+    std::string filename = output_prefix + "_results.tsv";
     output_file.open(filename);
     output_file << "name\tcomplete copies\tincomplete copies\texpected k-mer counts\thighest adjusted incomplete k-mer hits" << std::endl;
     gff_file.open(output_prefix + ".gff");
@@ -1082,7 +1082,6 @@ int main(int argc, char* argv[]) {
     for (auto &seq_name_score : seq_name_to_score)
     {
         scores_vec.push_back(seq_name_score.second);
-        std::cerr << seq_name_score.second << std::endl;
     }
     auto ecdf = empirical_cumulative_distribution_function(std::move(scores_vec));
 
