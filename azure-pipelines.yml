@@ -20,7 +20,7 @@ jobs:
       - script: |
           source activate aakomp_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib boost-cpp
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence boost-cpp  r-base   r-ggplot2   r-dplyr   r-readr   r-cairo   r-gridextra r-pracma
         displayName: Install dependencies
       - script: |
           source activate aakomp_CI
@@ -57,7 +57,7 @@ jobs:
       - script: |
           source activate aakomp_CI
           conda install --yes -c conda-forge mamba python=3.9
-          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib boost-cpp
+          mamba install --yes -c conda-forge -c bioconda compilers meson gperftools sdsl-lite libdivsufsort libsequence zlib cmake btllib gperftools libsequence numpy matplotlib boost-cpp r-base   r-ggplot2   r-dplyr   r-readr   r-cairo   r-gridextra r-pracma
         displayName: Install dependencies
       - script: |
           source activate aakomp_CI
