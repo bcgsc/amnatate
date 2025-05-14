@@ -41,5 +41,5 @@ executable('make_mibf',
     install : true
 )
 
-scripts = ['run-aakomp', 'aakomp_score.py']
+scripts = ['run-aakomp', 'aakomp_plot.R']
 install_data(scripts, install_dir : 'bin', install_mode : 'rwxr-xr--')

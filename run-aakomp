@@ -113,13 +113,15 @@ def run_aakomp(args):
     log("Finished running aaKomp.")
 
 def run_aakomp_analysis(args):
-    log("Calculating aaKomp Score...")
+    log("plotting aaKomp gff CDF ...")
 
     results_file = f"{args.output}.gff"
+    rescue_threshold = args.lower_bound
+    score_file = f"{args.output}_score.txt"
 
-    cmd = [ "aakomp_score.py", results_file ]
+    cmd = [ "aakomp_plot.R", results_file, str(rescue_threshold), score_file ]
 
-    cmd = wrap_with_time(cmd, "aakomp_score.py", args.output, args.track_time)
+    cmd = wrap_with_time(cmd, "aakomp_plot.R", args.output, args.track_time)
 
     log(f"Running command: {' '.join(cmd)}")
     if not args.dry_run:
