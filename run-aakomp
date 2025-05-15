@@ -189,7 +189,7 @@ def main():
             download_lineage(args.lineage, args.db_dir)
 
     # Step 2: Build mibf path
-    base_name = (args.reference if args.reference else args.lineage).rsplit('.', 1)[0]
+    base_name = (args.reference if args.reference else args.lineage).rsplit('.', 1)[0].rsplit('/')[-1]
     args.mibf_path = os.path.join(args.db_dir, f"{base_name}/", f"{base_name}.mibf")
 
     # Step 3: Build miBF
