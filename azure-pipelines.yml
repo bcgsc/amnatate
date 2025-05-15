@@ -31,8 +31,6 @@ jobs:
         displayName: Compile aaKomp
       - script: |
           source activate aakomp_CI
-          git lfs install
-          git lfs pull
           export BOOST_ROOT=$CONDA_PREFIX
           export PATH=$(pwd)/test_build/bin:$PATH
           cd test
