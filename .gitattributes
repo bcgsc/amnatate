@@ -1,0 +1,2 @@
+test/GCA_009914755.4_T2T-CHM13v2.0_genomic.fna.gz filter=lfs diff=lfs merge=lfs -text
+test/primates_odb12.tar.gz filter=lfs diff=lfs merge=lfs -text
