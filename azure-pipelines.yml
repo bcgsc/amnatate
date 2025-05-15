@@ -49,7 +49,7 @@ jobs:
     steps:
       - script: |
           mkdir -p ~/miniforge3
-          curl -L https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh  -o ~/miniforge3/miniforge.sh
+          curl -L https://github.com/conda-forge/miniforge/releases/download/25.3.0-2/Miniforge3-25.3.0-2-MacOSX-x86_64.sh  -o ~/miniforge3/miniforge.sh
           bash ~/miniforge3/miniforge.sh -b -u -p ~/miniforge3
           rm -rf  ~/miniforge3/miniforge.sh
           ~/miniforge3/bin/conda init bash
