@@ -33,7 +33,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y aria2
           aria2c -x 4 -s 4 -d test https://zenodo.org/records/15421506/files/primates_odb12.tar.gz
-        displayName: "Download primates_odb12.tar.gz into test/ with 4 threads"
+        displayName: Download primates_odb12.tar.gz
       - script: |
           source activate aakomp_CI
           export BOOST_ROOT=$CONDA_PREFIX
@@ -71,4 +71,16 @@ jobs:
           cd build
           ninja install
         displayName: Compile aaKomp
+      - script: |
+          sudo apt-get update
+          sudo apt-get install -y aria2
+          aria2c -x 4 -s 4 -d test https://zenodo.org/records/15421506/files/primates_odb12.tar.gz
+        displayName: Download primates_odb12.tar.gz
+      - script: |
+          source activate aakomp_CI
+          export BOOST_ROOT=$CONDA_PREFIX
+          export PATH=$(pwd)/test_build/bin:$PATH
+          cd test
+          ./aakomp_test_demo.sh
+        displayName: Test run for aaKomp
 
