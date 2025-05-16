@@ -43,7 +43,7 @@ jobs:
         displayName: Test run for aaKomp
 
   - job:
-    displayName: mac_latest-compilers-clang
+    displayName: mac-latest
     pool:
       vmImage: 'macOS-latest'
     steps:
