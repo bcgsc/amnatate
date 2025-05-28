@@ -41,8 +41,16 @@ ninja install
 - [btllib](https://github.com/bcgsc/btllib)
 - [libsequence](https://github.com/molpopgen/libsequence)
 - [gperftools](https://github.com/gperftools/gperftools)
-- [numpy](https://numpy.org/)
-- [matplotlib](https://matplotlib.org/)
+- [boost-cpp](https://www.boost.org/)
+- [r-base](https://cran.r-project.org/)
+- [r-ggplot2](https://ggplot2.tidyverse.org/)
+- [r-dplyr](https://dplyr.tidyverse.org/)
+- [r-readr](https://readr.tidyverse.org/)
+- [r-cairo](https://www.rdocumentation.org/packages/Cairo/)
+- [r-gridextra](https://cran.r-project.org/web/packages/gridExtra/)
+- [r-pracma](https://cran.r-project.org/web/packages/pracma/)
+- [hmmer=3.1](http://hmmer.org/)
+- [pigz](https://zlib.net/pigz/)
 
 ### Installing Dependencies with Conda
 
@@ -58,61 +66,72 @@ conda install -c conda-forge -c bioconda --file requirements.txt
 
 ## Running aaKomp
 
-You can run `aaKomp` either directly or using the wrapper script `run-aakomp`.
+You can run `aaKomp` either directly or using the driver script `run-aakomp`.
 
-### Wrapper Script: `run-aakomp`
+### Driver Script: `run-aakomp`
 
 The `run-aakomp` wrapper automates:
 
-- Checking for existing miBF
-- Building a miBF if missing using `make_mibf`
+- Downloading BUSCO lineages
+- Building a miBf if missing using `make_mibf` with BUSCO lineages or provided references
 - Running `aakomp`
-- Running post-analysis with `aakomp_score.py`
+- Visualizing with `aakomp_plot.R`
 
 ---
 
 ## Demo Example
 
-This demo runs `aaKomp` on the *C. elegans* genome using the `nematoda_odb12` ortholog protein set.
+Here are two example usages of `run-aakomp`. In both cases, the `--db-dir` flag controls where the miBf (multi-index Bloom filter) is stored and looked up.
 
 ```bash
-# Download the C. elegans genome
-wget -nc https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/985/GCF_000002985.6_WBcel235/GCF_000002985.6_WBcel235_genomic.fna.gz
-
-# Decompress the genome
-gunzip -c GCF_000002985.6_WBcel235_genomic.fna.gz > GCF_000002985.6_WBcel235_genomic.fna
-
-# Link the protein reference file to the current directory (assumes you have nematoda_odb12 in the current directory)
-ln -sf nematoda_odb12/nematoda_odb12.faa ./
-
-# Run aaKomp through the wrapper
+# Option 1: Run aaKomp using a provided reference file
 run-aakomp --db-dir ./ \
-  --reference nematoda_odb12.faa \
-  --input GCF_000002985.6_WBcel235_genomic.fna \
-  -o demo
+  --reference reference.faa \
+  --input input.fa \
+  -t 4 \
+  -o output_ref
 ```
 
+```bash
+# Option 2: Run aaKomp using a lineage name (e.g., "eukaryota")
+# The lineage's HMMs will be downloaded and consensus sequences will be extracted to generate a reference
+run-aakomp --db-dir ./ \
+  --lineage eukaryota \
+  --input input.fa \
+  -t 4 \
+  -o output_eukaryota
+```
+
+> **Note:**  
+> If the required miBF already exists in the specified --db-dir, it will be reused. Otherwise, run-aakomp will create one using either the provided --reference FASTA or a reference derived from the downloaded lineage.
+
+```
 
 ## Command-line Options
 
-`run-aakomp` options (partial list):
+`run-aakomp` options:
 
-| Option             | Description                                         |
-|--------------------|-----------------------------------------------------|
-| `--input` `-i`     | Genome file (FASTA) to assess                      |
-| `--reference` `-r` | Protein database (FASTA, amino acid)               |
-| `--output` `-o`    | Output prefix                                       |
-| `--db-dir`         | Directory to store miBF database                   |
-| `--threads` `-t`   | Number of threads (default: 48)                    |
-| `--hash` `-H`      | Number of hash functions for miBF (default: 9)    |
-| `--kmer` `-k`      | Amino acid k-mer size (default: 9)                 |
-| `--lower_bound` `-l` | Minimum occupancy threshold (default: 0.7)        |
-| `--rescue_kmer`    | Number of consecutive k-mers to initiate a seed    |
-| `--max_offset`     | Max distance to extend seed during chaining        |
-| `--track-time`     | Track runtime of each major step                   |
-| `--dry-run`        | Print commands only, do not execute                |
-| `--verbose` `-v`   | Verbose output                                     |
-| `--debug`          | Debug mode for internal troubleshooting            |
+| Option                   | Description                                                                 |
+|--------------------------|-----------------------------------------------------------------------------|
+| `--help-aakomp`          | Show help message for the `aakomp` binary and exit                          |
+| `--help-mibf`            | Show help message for the `make_mibf` binary and exit                       |
+| `-i`, `--input`          | Input genome file in FASTA format                                           |
+| `-o`, `--output`         | Output prefix (default: `_`)                                                |
+| `-r`, `--reference`      | Amino acid reference file (e.g., orthologous protein set)                   |
+| `-t`, `--threads`        | Number of threads to use (default: 48)                                      |
+| `-v`, `--verbose`        | Enable verbose output                                                       |
+| `--debug`                | Enable debug mode for internal troubleshooting                              |
+| `-H`, `--hash`           | Number of hash functions used in miBF (default: 9)                          |
+| `-k`, `--kmer`           | Amino acid k-mer size (default: 9)                                          |
+| `-l`, `--lower-bound`    | Minimum occupancy threshold for valid hits (default: 0.7)                   |
+| `--rescue-kmer`          | Number of consecutive k-mers to initiate a new seed (default: 4)            |
+| `--max-offset`           | Maximum offset allowed when extending a seed during chaining (default: 2)   |
+| `--lineage`              | Name of BUSCO lineage to auto-download and use as reference                 |
+| `--db-dir`               | Directory for or to store miBf database files (default: `./`)               |
+| `--dry-run`              | Print commands that would be executed, but don’t run them                   |
+| `--track-time`           | Record and report runtime statistics for each major step                    |
+| `--odb-version`          | BUSCO ortholog database version (default: `12`)                             |
+| `--list-lineages`        | List all available BUSCO lineages and exit   
 
 ---
 
