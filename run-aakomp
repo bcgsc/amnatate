@@ -1,71 +1,107 @@
 #!/usr/bin/env python3
-"""
-aaKomp Wrapper: Download lineage, build miBF if needed, run aaKomp, and perform post-analysis.
-Written by Johnathan Wong
-"""
 
 import argparse
 import os
 import subprocess
 import sys
 import shutil
+import urllib.request
+import re
+from datetime import datetime
+from typing import List
 
-def log(msg):
-    sys.stderr.write(f"{msg}\n")
+def log(msg: str, verbose: bool = True) -> None:
+    if verbose:
+        timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+        sys.stderr.write(f"{timestamp} {msg}\n")
 
-def run_help(binary_name):
-    log(f"Displaying help for {binary_name}")
-    try:
-        subprocess.run([binary_name, "-h"], check=True)
-    except FileNotFoundError:
-        log(f"Error: {binary_name} not found in PATH.")
+def run_help(binary_name: str) -> None:
+    subprocess.run([binary_name, "-h"], check=True)
 
-def download_lineage(lineage, data_dir):
-    log(f"Downloading data for lineage '{lineage}' into '{data_dir}'...")
-    # Replace with actual download logic
-    fasta_path = os.path.join(data_dir, f"{lineage}.fa")
-    log(f"Finished downloading lineage. File: {fasta_path}")
+def download_and_prepare_lineage(lineage_name: str, data_dir: str, odb_version: str, dry_run: bool, verbose: bool = False) -> str:
+    output_fasta = os.path.join(data_dir, f"{lineage_name}_{odb_version}.faa")
 
-def is_database_built(mibf_path):
+    if not dry_run:
+        base_url = "https://busco-data.ezlab.org/v5/data/lineages/"
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode("utf-8")
+
+        pattern = re.compile(rf'href="({lineage_name}_{odb_version}\.\d{{4}}-\d{{2}}-\d{{2}}\.tar\.gz)"')
+        matches = pattern.findall(html)
+
+        if not matches:
+            raise ValueError(f"No dataset found for {lineage_name}_{odb_version}")
+
+        tarball_name = matches[0]
+        tarball_url = base_url + tarball_name
+        tarball_path = os.path.join(data_dir, tarball_name)
+        lineage_dir_name = f"{lineage_name}_{odb_version}"
+
+        log(f"Downloading with wget: {tarball_url}")
+        subprocess.run(["wget", "-O", tarball_path, tarball_url], check=True)
+
+        cwd = os.getcwd()
+        os.makedirs(data_dir, exist_ok=True)
+        os.chdir(data_dir)
+
+        hmm_path = f"{lineage_dir_name}/hmms"
+        try:
+            if shutil.which("pigz"):
+                log(f"Using pigz to extract {hmm_path}...", verbose)
+                subprocess.run(["tar", "--use-compress-program=pigz", "-xf", tarball_name, hmm_path], check=True)
+            else:
+                log(f"Using gzip to extract {hmm_path}...", verbose)
+                subprocess.run(["tar", "-xzf", tarball_name, hmm_path], check=True)
+        finally:
+            os.chdir(cwd)
+
+        hmms_dir = os.path.join(data_dir, hmm_path)
+        if not os.path.isdir(hmms_dir):
+            raise FileNotFoundError(f"hmms directory not found: {hmms_dir}")
+
+        
+        log(f"Running hmmemit -c on HMMs in {hmms_dir}...", verbose)
+
+        with open(output_fasta, "w") as out_f:
+            for hmm_file in os.listdir(hmms_dir):
+                hmm_path_full = os.path.join(hmms_dir, hmm_file)
+                try:
+                    result = subprocess.run(["hmmemit", "-c", hmm_path_full], capture_output=True, check=True, text=True)
+                    out_f.write(result.stdout)
+                except subprocess.CalledProcessError:
+                    log(f"Warning: hmmemit failed for {hmm_file}")
+
+        log("Cleaning up .tar.gz and extracted hmms folder...", verbose)
+        os.remove(tarball_path)
+        shutil.rmtree(hmms_dir)
+        parent = os.path.dirname(hmms_dir)
+        if os.path.isdir(parent) and not os.listdir(parent):
+            shutil.rmtree(parent)
+    else:
+        log(f"Dry run: would download lineage {lineage_name} version {odb_version} to {data_dir}")
+
+    log(f"Lineage FASTA ready: {output_fasta}")
+    return output_fasta
+
+def is_database_built(mibf_path: str, verbose: bool = False) -> bool:
     exists = os.path.isfile(mibf_path)
     log(f"{'Located' if exists else 'Could not locate'} miBF at: {mibf_path}")
     return exists
 
-def wrap_with_time(cmd, label, output_prefix, track_time):
+def wrap_with_time(cmd: List[str], label: str, output_prefix: str, track_time: bool) -> List[str]:
     if track_time and shutil.which("/usr/bin/time"):
         time_file = f"{label}_{output_prefix}.time"
         return ["/usr/bin/time", "-pv", "-o", time_file] + cmd
     return cmd
 
-def run_make_mibf(args):
-    log("Building miBF using make_mibf...")
-
-    
-
-    # Softlink reference into db_dir so make_mibf can see it locally
+def run_make_mibf(args: argparse.Namespace) -> None:
+    log("Starting make_mibf...")
     ref_name = os.path.basename(args.reference)
     base_name = os.path.splitext(ref_name)[0]
     full_db_path = os.path.join(args.db_dir, base_name)
-    os.makedirs(full_db_path, exist_ok=True)
-    ref_path = os.path.join(full_db_path, ref_name)
-
-    
-
-    if not os.path.exists(ref_path):
-        os.symlink(os.path.abspath(args.reference), ref_path)
-        log(f"Created symlink for reference file: {ref_path}")
-    else:
-        log(f"Reference file already exists at: {ref_path}")
-
-    # Build the make_mibf command using local symlink
     cmd = [
-        "make_mibf",
-        "-i", ref_name,           # local file within db_dir
-        "-o", base_name,                # write output to db_dir itself
-        "-r", ref_name,           # local file within db_dir
-        "-k", str(args.kmer),
-        "-h", str(args.hash),
-        "-t", str(args.threads)
+        "make_mibf", "-i", ref_name, "-o", base_name, "-r", ref_name,
+        "-k", str(args.kmer), "-h", str(args.hash), "-t", str(args.threads)
     ]
     if args.verbose:
         cmd.append("-v")
@@ -74,29 +110,37 @@ def run_make_mibf(args):
 
     cmd = wrap_with_time(cmd, "make_mibf", args.output, args.track_time)
 
+
     log(f"Running command in {full_db_path}: {' '.join(cmd)}")
     if not args.dry_run:
+        os.makedirs(full_db_path, exist_ok=True)
+        ref_path = os.path.join(full_db_path, ref_name)
+
+        if not os.path.exists(ref_path):
+            if args.lineage:
+                shutil.move(os.path.abspath(args.reference), ref_path)
+                log(f"Moved lineage-derived reference to: {ref_path}", args.verbose)
+                args.reference = ref_path
+            else:
+                os.symlink(os.path.abspath(args.reference), ref_path)
+                log(f"Created symlink for reference file: {ref_path}", args.verbose)
+        else:
+            log(f"Reference file already exists at: {ref_path}", args.verbose)
+
+
         subprocess.check_call(cmd, cwd=full_db_path)
     else:
         log("Dry run: skipping execution")
 
     log("Finished building miBF.")
 
-
-def run_aakomp(args):
-    log("Running aaKomp...")
+def run_aakomp(args: argparse.Namespace) -> None:
+    log("Starting aaKomp...")
     cmd = [
-        "aakomp",
-        "-i", args.input,
-        "-o", args.output,
-        "-r", args.reference,
-        "-t", str(args.threads),
-        "-k", str(args.kmer),
-        "-h", str(args.hash),
-        "-l", str(args.lower_bound),
-        "--mibf_path", args.mibf_path,
-        "--rescue_kmer", str(args.rescue_kmer),
-        "--max_offset", str(args.max_offset)
+        "aakomp", "-i", args.input, "-o", args.output, "-r", args.reference,
+        "-t", str(args.threads), "-k", str(args.kmer), "-h", str(args.hash),
+        "-l", str(args.lower_bound), "--mibf_path", args.mibf_path,
+        "--rescue_kmer", str(args.rescue_kmer), "--max_offset", str(args.max_offset)
     ]
     if args.verbose:
         cmd.append("-v")
@@ -112,31 +156,26 @@ def run_aakomp(args):
         log("Dry run: skipping execution")
     log("Finished running aaKomp.")
 
-def run_aakomp_analysis(args):
-    log("plotting aaKomp gff CDF ...")
-
+def run_aakomp_analysis(args: argparse.Namespace) -> None:
+    log("Starting aaKomp analysis...")
     results_file = f"{args.output}.gff"
-    rescue_threshold = args.lower_bound
     score_file = f"{args.output}_score.txt"
-
-    cmd = [ "aakomp_plot.R", results_file, str(rescue_threshold), score_file ]
-
+    cmd = ["aakomp_plot.R", results_file, str(args.lower_bound), score_file]
     cmd = wrap_with_time(cmd, "aakomp_plot.R", args.output, args.track_time)
 
     log(f"Running command: {' '.join(cmd)}")
     if not args.dry_run:
         subprocess.check_call(cmd)
+    else:
+        log("Dry run: skipping execution")
 
     log("Finished post-analysis.")
 
 def main():
-    parser = argparse.ArgumentParser(description="aaKomp wrapper: download lineage, build or use miBF, run aaKomp")
+    parser = argparse.ArgumentParser(description="aaKomp driver script: download lineage, build miBF, run aaKomp")
 
-    # Help passthroughs
     parser.add_argument("--help-aakomp", action="store_true")
     parser.add_argument("--help-mibf", action="store_true")
-
-    # Parameters
     parser.add_argument("-i", "--input", help="Input file name")
     parser.add_argument("-o", "--output", default="_")
     parser.add_argument("-r", "--reference", required=False)
@@ -148,14 +187,11 @@ def main():
     parser.add_argument("-l", "--lower_bound", type=float, default=0.7)
     parser.add_argument("--rescue_kmer", type=int, default=4)
     parser.add_argument("--max_offset", type=int, default=2)
-
-    # Input modes
     parser.add_argument("--lineage")
     parser.add_argument("--db-dir", required=True)
-
-    # New flags
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--track-time", action="store_true")
+    parser.add_argument("--odb-version", default="12", help="BUSCO odb version to use (default: 12)")
 
     args = parser.parse_args()
 
@@ -174,33 +210,32 @@ def main():
         parser.error("Input file is required.")
     elif not os.path.isfile(args.input):
         parser.error(f"Input file '{args.input}' does not exist.")
-    if args.reference and not os.path.isfile(args.reference):
-        parser.error(f"Reference file '{args.reference}' does not exist.")
 
-    # Output all arguments
     log("Arguments:")
     for arg in vars(args):
         log(f"  {arg}: {getattr(args, arg)}")
 
-    # Step 1: Lineage download if applicable
     if args.lineage:
-        if not is_database_built(args.input):
+        if not args.dry_run:
             os.makedirs(args.db_dir, exist_ok=True)
-            download_lineage(args.lineage, args.db_dir)
+        odb_version_str = "odb" + args.odb_version
+        ref_name = f"{args.lineage}" + f"_{odb_version_str}" 
+        final_faa = os.path.join(args.db_dir, ref_name, f"{ref_name}.faa")
+        if os.path.isfile(final_faa):
+            log(f"Found existing lineage FASTA: {final_faa}")
+            args.reference = final_faa
+        else:
+            args.reference = download_and_prepare_lineage(args.lineage, args.db_dir, odb_version_str, args.dry_run, args.verbose)
 
-    # Step 2: Build mibf path
-    base_name = (args.reference if args.reference else args.lineage).rsplit('.', 1)[0].rsplit('/')[-1]
+    base_name = os.path.splitext(os.path.basename(args.reference))[0]
     args.mibf_path = os.path.join(args.db_dir, f"{base_name}/", f"{base_name}.mibf")
 
-    # Step 3: Build miBF
     if not is_database_built(args.mibf_path):
         run_make_mibf(args)
 
-    # Step 4: Run aaKomp
     run_aakomp(args)
-
-
     run_aakomp_analysis(args)
 
 if __name__ == "__main__":
     main()
+
