@@ -36,11 +36,11 @@ def list_available_lineages(base_url: str) -> None:
         print(f"  {lineage} (version: {odb})")
     print("\nTo use one of these, pass --lineage <name> and optionally --odb-version <version number, e.g., 12>")
 
-def download_and_prepare_lineage(lineage_name: str, data_dir: str, odb_version: str, dry_run: bool, verbose: bool = False) -> str:
+def download_and_prepare_lineage(lineage_name: str, data_dir: str, odb_version: str, c: str, dry_run: bool, verbose: bool = False) -> str:
     output_fasta = os.path.join(data_dir, f"{lineage_name}_{odb_version}.faa")
 
     if not dry_run:
-        base_url = "https://busco-data.ezlab.org/v5/data/lineages/"
+        base_url = busco_website
         with urllib.request.urlopen(base_url) as response:
             html = response.read().decode("utf-8")
 
@@ -214,16 +214,18 @@ def main():
 
     args = parser.parse_args()
 
+    busco_website = "https://busco-data.ezlab.org/v5/data/lineages/"
+
     if args.list_lineages:
-        list_available_lineages("https://busco-data.ezlab.org/v5/data/lineages/")
+        list_available_lineages(busco_website)
         sys.exit(0)
 
     if args.help_aakomp:
         run_help("aakomp")
-        sys.exit()
+        sys.exit(0)
     if args.help_mibf:
         run_help("make_mibf")
-        sys.exit()
+        sys.exit(0)
 
     if not args.reference and not args.lineage:
         parser.error("--reference or --lineage must be provided.")
@@ -248,7 +250,7 @@ def main():
             log(f"Found existing lineage FASTA: {final_faa}")
             args.reference = final_faa
         else:
-            args.reference = download_and_prepare_lineage(args.lineage, args.db_dir, odb_version_str, args.dry_run, args.verbose)
+            args.reference = download_and_prepare_lineage(args.lineage, args.db_dir, odb_version_str, busco_website, args.dry_run, args.verbose)
 
     base_name = os.path.splitext(os.path.basename(args.reference))[0]
     args.mibf_path = os.path.join(args.db_dir, f"{base_name}/", f"{base_name}.mibf")

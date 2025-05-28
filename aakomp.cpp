@@ -506,12 +506,12 @@ int main(int argc, char* argv[]) {
     
     program.add_argument("-h", "--hash")
         .help("Number of hash functions")
-        .default_value(uint8_t(9))
+        .default_value(9)
         .scan<'u', uint8_t>();
     
     program.add_argument("-k", "--kmer")
         .help("K-mer size")
-        .default_value(uint8_t(9))
+        .default_value(9)
         .scan<'u', uint8_t>();
 
     
@@ -530,6 +530,15 @@ int main(int argc, char* argv[]) {
         .default_value(size_t(2))
         .scan<'u', size_t>();
 
+    bool help_flag = std::any_of(argv, argv + argc, [](const char* arg) {
+        return std::string(arg) == "-h" || std::string(arg) == "--help";
+    });
+
+    if (help_flag) {
+        std::cerr << program << std::endl;
+        return 0;
+    }
+
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception& err) {
@@ -538,8 +547,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Extract values
-    bool help_flag = program.get<bool>("--help");
     bool verbose_flag = program.get<bool>("--verbose");
     bool debug_flag = program.get<bool>("--debug");
     size_t threads = program.get<size_t>("--threads");

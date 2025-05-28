@@ -67,7 +67,7 @@ btllib::MIBloomFilter<uint64_t> make_small_mibf(const std::string& seq, size_t h
 }
 
 int main(int argc, char* argv[]) {
-    argparse::ArgumentParser program("miBf_Construction");
+    argparse::ArgumentParser program("make_mibf");
 
     program.add_argument("--help")
         .help("Display this help message")
@@ -93,12 +93,12 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("-h", "--hash")
         .help("Number of hash functions")
-        .default_value(uint8_t(9))
+        .default_value(9)
         .scan<'u', uint8_t>();
 
     program.add_argument("-k", "--kmer")
         .help("K-mer size")
-        .default_value(uint8_t(9))
+        .default_value(9)
         .scan<'u', uint8_t>();
 
     program.add_argument("-v", "--verbose")
@@ -108,17 +108,26 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("-rks", "--rescue_kmer")
         .help("Rescue k-mer size")
-        .default_value(uint8_t(4))
+        .default_value(4)
         .scan<'u', uint8_t>();
+
+    bool help_flag = std::any_of(argv, argv + argc, [](const char* arg) {
+        return std::string(arg) == "-h" || std::string(arg) == "--help";
+    });
+
+    if (help_flag) {
+        std::cerr << program << std::endl;
+        return 0;
+    }
 
     try {
         program.parse_args(argc, argv);
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+    } catch (const std::exception& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
         return 1;
     }
 
-    bool help_flag = program.get<bool>("--help");
     bool verbose_flag = program.get<bool>("--verbose");
     size_t threads = program.get<size_t>("--threads");
     std::string input_file = program.get<std::string>("--input");
@@ -128,9 +137,15 @@ int main(int argc, char* argv[]) {
     uint8_t kmer_size = program.get<uint8_t>("--kmer");
     uint8_t rescue_kmer_size = program.get<uint8_t>("--rescue_kmer");
 
-    if (help_flag) {
-        std::cerr << program << std::endl;
-        return 0;
+
+    if (input_file.empty()) {
+        std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
+        return 1;
+    }
+
+    if (reference_path.empty()) {
+        std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
+        return 1;
     }
 
     if (verbose_flag) {
