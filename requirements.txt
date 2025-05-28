@@ -10,3 +10,12 @@ zlib
 numpy
 matplotlib
 boost-cpp
+r-base
+r-ggplot2
+r-dplyr
+r-readr
+r-cairo
+r-gridextra
+r-pracma
+hmmer=3.1
+pigz
