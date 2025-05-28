@@ -531,7 +531,7 @@ int main(int argc, char* argv[]) {
         .scan<'u', size_t>();
 
     bool help_flag = std::any_of(argv, argv + argc, [](const char* arg) {
-        return std::string(arg) == "-h" || std::string(arg) == "--help";
+        return std::string(arg) == "--help";
     });
 
     if (help_flag) {
