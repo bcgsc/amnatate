@@ -36,7 +36,7 @@ def list_available_lineages(base_url: str) -> None:
         print(f"  {lineage} (version: {odb})")
     print("\nTo use one of these, pass --lineage <name> and optionally --odb-version <version number, e.g., 12>")
 
-def download_and_prepare_lineage(lineage_name: str, data_dir: str, odb_version: str, c: str, dry_run: bool, verbose: bool = False) -> str:
+def download_and_prepare_lineage(lineage_name: str, data_dir: str, odb_version: str, busco_website: str, dry_run: bool, verbose: bool = False) -> str:
     output_fasta = os.path.join(data_dir, f"{lineage_name}_{odb_version}.faa")
 
     if not dry_run:
