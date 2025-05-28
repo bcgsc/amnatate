@@ -190,7 +190,7 @@ def run_aakomp_analysis(args: argparse.Namespace) -> None:
     log("Finished post-analysis.")
 
 def main():
-    parser = argparse.ArgumentParser(description="aaKomp driver script: download lineage, build miBF, run aaKomp")
+    parser = argparse.ArgumentParser(description="aaKomp driver script: download lineage, build miBf, run aaKomp")
 
     parser.add_argument("--help-aakomp", action="store_true")
     parser.add_argument("--help-mibf", action="store_true")
@@ -202,9 +202,9 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("-H", "--hash", type=int, default=9)
     parser.add_argument("-k", "--kmer", type=int, default=9)
-    parser.add_argument("-l", "--lower_bound", type=float, default=0.7)
-    parser.add_argument("--rescue_kmer", type=int, default=4)
-    parser.add_argument("--max_offset", type=int, default=2)
+    parser.add_argument("-l", "--lower-bound", type=float, default=0.7)
+    parser.add_argument("--rescue-kmer", type=int, default=4)
+    parser.add_argument("--max-offset", type=int, default=2)
     parser.add_argument("--lineage")
     parser.add_argument("--db-dir", default="./")
     parser.add_argument("--dry-run", action="store_true")
