@@ -67,6 +67,8 @@ make_small_mibf(const std::string &seq, size_t hash_num, size_t kmer_size) {
 
     if (stage == 0) {
       mi_bf.complete_bv_insertion();
+    } else if (stage == 1) {
+      mi_bf.complete_id_insertion();
     }
   }
 
@@ -246,6 +248,8 @@ int main(int argc, char *argv[]) {
 
     if (stage == 0) {
       mi_bf.complete_bv_insertion();
+    } else if (stage == 1) {
+      mi_bf.complete_id_insertion();
     }
   }
 
