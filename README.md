@@ -1,3 +1,5 @@
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/bcgsc/aakomp)
+
 # aaKomp
 
 ## Description
@@ -105,7 +107,7 @@ run-aakomp --db-dir ./ \
 > **Note:**  
 > If the required miBF already exists in the specified --db-dir, it will be reused. Otherwise, run-aakomp will create one using either the provided --reference FASTA or a reference derived from the downloaded lineage.
 
-```
+
 
 ## Command-line Options
 
@@ -131,9 +133,10 @@ run-aakomp --db-dir ./ \
 | `--dry-run`              | Print commands that would be executed, but don’t run them                   |
 | `--track-time`           | Record and report runtime statistics for each major step                    |
 | `--odb-version`          | BUSCO ortholog database version (default: `12`)                             |
-| `--list-lineages`        | List all available BUSCO lineages and exit   
+| `--list-lineages`        | List all available BUSCO lineages and exit                                  |
+| `--version`              | Print version of aaKomp                                                     |
 
----
+
 
 ## License
 
