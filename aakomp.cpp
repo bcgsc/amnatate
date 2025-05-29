@@ -501,18 +501,18 @@ int main(int argc, char* argv[]) {
         .implicit_value(true);
     
     program.add_argument("-m", "--mibf_path")
-        .help("MIBF file path")
-        .default_value(std::string(""));
+        .help("miBf file path")
+        .required();
     
     program.add_argument("-h", "--hash")
         .help("Number of hash functions")
-        .default_value(9)
-        .scan<'u', uint8_t>();
+        .default_value(size_t(9))
+        .scan<'u', size_t>();
     
     program.add_argument("-k", "--kmer")
         .help("K-mer size")
-        .default_value(9)
-        .scan<'u', uint8_t>();
+        .default_value(size_t(9))
+        .scan<'u', size_t>();
 
     
     program.add_argument("-l", "--lower_bound")
@@ -554,8 +554,8 @@ int main(int argc, char* argv[]) {
     std::string reference_path = program.get<std::string>("--reference");
     std::string output_prefix = program.get<std::string>("--output");
     std::string mibf_path = program.get<std::string>("--mibf_path");
-    uint8_t hash_num = program.get<uint8_t>("--hash");
-    uint8_t kmer_size = program.get<uint8_t>("--kmer");
+    uint8_t hash_num = static_cast<uint8_t>(program.get<size_t>("--hash"));
+    uint8_t kmer_size = static_cast<uint8_t>(program.get<size_t>("--kmer"));
     size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
     double lower_bound = program.get<double>("--lower_bound");
     size_t max_offset = program.get<size_t>("--max_offset");
@@ -1055,13 +1055,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
-
+    std::unordered_map<std::string, double> seq_name_to_score;
     for (auto &seq_name_completeness : seq_name_to_completeness)
     {
         output_file << seq_name_completeness.first << "\t" << seq_name_completeness.second.complete_copies << "\t" << seq_name_completeness.second.incomplete_copies << "\t" << seq_name_completeness.second.expected_kmer_counts << "\t" << seq_name_completeness.second.highest_adjusted_kmer_counts << std::endl;
+        seq_name_to_score[seq_name_completeness.first] = 0;
     }
 
-    std::unordered_map<std::string, double> seq_name_to_score;
+    
     for (auto &gff : gff_set)
     {
         gff_file << gff.query_name << "\t"
@@ -1072,17 +1073,9 @@ int main(int argc, char* argv[]) {
                     << "0"
                     << "\t"
                     << "ID=" << gff.hit_name << std::endl;
-        if (seq_name_to_score.find(gff.hit_name) == seq_name_to_score.end())
-        {
-
-            seq_name_to_score[gff.hit_name] = gff.score;
-        }
-        else
-        {
         if (seq_name_to_score[gff.hit_name] < gff.score)
         {
             seq_name_to_score[gff.hit_name] = gff.score;
-        }
         }
     }
     std::vector<double> scores_vec;
@@ -1090,9 +1083,11 @@ int main(int argc, char* argv[]) {
     {
         scores_vec.push_back(seq_name_score.second);
     }
-    auto ecdf = empirical_cumulative_distribution_function(std::move(scores_vec));
 
-    double result = (1 - trapezoidal(ecdf, 0.0, 1.0)) * 100;
+    double result = 0.0;
+
+    auto ecdf = empirical_cumulative_distribution_function(std::move(scores_vec));
+    result = (1 - trapezoidal(ecdf, 0.0, 1.0)) * 100;
 
     std::cout << "aaKomp score for " << input_file << " is: " << result << std::endl;
 

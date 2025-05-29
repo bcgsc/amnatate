@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-
+"""
+aaKomp driver: Download lineage, build miBf if needed, run aaKomp, and visualization.
+Written by Johnathan Wong
+"""
 import argparse
 import os
 import subprocess
@@ -118,7 +121,7 @@ def run_make_mibf(args: argparse.Namespace) -> None:
     base_name = os.path.splitext(ref_name)[0]
     full_db_path = os.path.join(args.db_dir, base_name)
     cmd = [
-        "make_mibf", "-i", ref_name, "-o", base_name, "-r", ref_name,
+        "make_mibf", "-r", ref_name, "-o", base_name,
         "-k", str(args.kmer), "-h", str(args.hash), "-t", str(args.threads)
     ]
     if args.verbose:

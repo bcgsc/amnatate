@@ -74,10 +74,6 @@ int main(int argc, char* argv[]) {
         .default_value(false)
         .implicit_value(true);
 
-    program.add_argument("-i", "--input")
-        .help("Input file name")
-        .required();
-
     program.add_argument("-o", "--output")
         .help("Output prefix")
         .default_value(std::string("_"));
@@ -93,13 +89,13 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("-h", "--hash")
         .help("Number of hash functions")
-        .default_value(9)
-        .scan<'u', uint8_t>();
+        .default_value(size_t(9))
+        .scan<'u', size_t>();
 
     program.add_argument("-k", "--kmer")
         .help("K-mer size")
-        .default_value(9)
-        .scan<'u', uint8_t>();
+        .default_value(size_t(9))
+        .scan<'u', size_t>();
 
     program.add_argument("-v", "--verbose")
         .help("Verbose output")
@@ -108,8 +104,8 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("-rks", "--rescue_kmer")
         .help("Rescue k-mer size")
-        .default_value(4)
-        .scan<'u', uint8_t>();
+        .default_value(size_t(4))
+        .scan<'u', size_t>();
 
     bool help_flag = std::any_of(argv, argv + argc, [](const char* arg) {
         return std::string(arg) == "--help";
@@ -130,18 +126,11 @@ int main(int argc, char* argv[]) {
 
     bool verbose_flag = program.get<bool>("--verbose");
     size_t threads = program.get<size_t>("--threads");
-    std::string input_file = program.get<std::string>("--input");
     std::string reference_path = program.get<std::string>("--reference");
     std::string output_prefix = program.get<std::string>("--output");
-    uint8_t hash_num = program.get<uint8_t>("--hash");
-    uint8_t kmer_size = program.get<uint8_t>("--kmer");
-    uint8_t rescue_kmer_size = program.get<uint8_t>("--rescue_kmer");
-
-
-    if (input_file.empty()) {
-        std::cerr << "Input file is required. Use -h or --help for more information." << std::endl;
-        return 1;
-    }
+    uint8_t hash_num = static_cast<uint8_t>(program.get<size_t>("--hash"));
+    uint8_t kmer_size = static_cast<uint8_t>(program.get<size_t>("--kmer"));
+    size_t rescue_kmer_size = program.get<size_t>("--rescue_kmer");
 
     if (reference_path.empty()) {
         std::cerr << "Reference path is required. Use -h or --help for more information." << std::endl;
@@ -149,9 +138,8 @@ int main(int argc, char* argv[]) {
     }
 
     if (verbose_flag) {
-        std::cerr << "Input file: " << input_file << "\n"
+        std::cerr << "Reference path: " << reference_path << "\n"
                   << "Output prefix: " << output_prefix << "\n"
-                  << "Reference path: " << reference_path << "\n"
                   << "Threads: " << threads << "\n"
                   << "Hash number: " << static_cast<uint64_t>(hash_num) << "\n"
                   << "Kmer size: " << static_cast<uint64_t>(kmer_size) << "\n"
