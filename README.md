@@ -72,7 +72,7 @@ You can run `aaKomp` either directly or using the driver script `run-aakomp`.
 
 ### Driver Script: `run-aakomp`
 
-The `run-aakomp` wrapper automates:
+The `run-aakomp` driver automates:
 
 - Downloading BUSCO lineages
 - Building a miBf if missing using `make_mibf` with BUSCO lineages or provided references
