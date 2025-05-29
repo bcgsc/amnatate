@@ -25,6 +25,6 @@ fi
 
 run-aakomp --list-lineages
 
-run-aakomp --db-dir ./ --lineage eukaryota --input small_test.fa -t 4 -o demo2
+run-aakomp --db-dir ./ --lineage eukaryota --input small_test.fa -t 4 -o demo2 --dont-visualize
 
 exit 0
