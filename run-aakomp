@@ -211,7 +211,7 @@ def main():
     parser.add_argument("--track-time", action="store_true")
     parser.add_argument("--odb-version", default="12", help="BUSCO odb version to use (default: 12)")
     parser.add_argument("--list-lineages", action="store_true", help="List available BUSCO lineages")
-    parser.add_argument("--visualise", action="store_true", help="Visualise cdf")
+    parser.add_argument("--visualise", action="store_true", help="Visualise the cumulative distribution function")
     parser.add_argument("--version", action="version", version="v1.0.0")
 
     args = parser.parse_args()
