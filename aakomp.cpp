@@ -636,6 +636,9 @@ int main(int argc, char *argv[]) {
     btllib::SeqReader reader(reference_path,
                              btllib::SeqReader::Flag::LONG_MODE);
     for (const auto record : reader) {
+      if (record.seq.size() < (size_t)kmer_size + 5) {
+          continue;
+      }
       seq_ID_to_miBf_ID[record.id] = miBf_ID;
       miBf_ID_to_seq_ID_and_len[miBf_ID] =
           std::make_pair(record.id, record.seq.size());
@@ -690,11 +693,14 @@ int main(int argc, char *argv[]) {
   for (const auto &seq_ID : seq_ID_to_miBf_ID) {
     seq_name_to_completeness[seq_ID.first] = completeness_struct();
   }
+  
+  omp_set_nested(1);
 
-#pragma omp parallel num_threads(threads)
+#pragma omp parallel num_threads(threads / 2)
   for (const auto record : reader) {
     std::vector<std::string> sixframed_xlated_proteins =
         sixframe_translate(record.seq);
+#pragma omp parallel for num_threads(2)
     for (size_t ori = 0; ori < ORIENTATIONS; ++ori) {
       std::unordered_map<
           size_t, std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>>>
