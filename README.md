@@ -92,6 +92,7 @@ run-aakomp --db-dir ./ \
   --input input.fa \
   -t 4 \
   -o output_ref
+  # --visualise optional argument to visualise the cumulative distribution function
 ```
 
 ```bash
@@ -134,6 +135,7 @@ run-aakomp --db-dir ./ \
 | `--track-time`           | Record and report runtime statistics for each major step                    |
 | `--odb-version`          | BUSCO ortholog database version (default: `12`)                             |
 | `--list-lineages`        | List all available BUSCO lineages and exit                                  |
+| `--visualise`            | Visualise the cumulative distribution function                              |
 | `--version`              | Print version of aaKomp                                                     |
 
 
