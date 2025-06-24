@@ -269,6 +269,7 @@ int main(int argc, char *argv[]) {
 #pragma omp parallel
   for (const auto &record : reader) {
       if (record.seq.size() < (size_t)kmer_size + 5){
+	  std::cerr << "Skipping sequence: " << record.id << " due to length: " << record.seq.size() << std::endl;
           continue;
       }
     auto mi_bf_small = make_small_mibf(record.seq, hash_num, rescue_kmer_size);
