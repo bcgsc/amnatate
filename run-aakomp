@@ -262,7 +262,7 @@ def main():
 
     run_aakomp(args)
 
-    if args.visualize:
+    if args.visualise:
         run_aakomp_analysis(args)
 
 if __name__ == "__main__":
